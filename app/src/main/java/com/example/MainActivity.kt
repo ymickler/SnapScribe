@@ -11,6 +11,11 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -167,11 +172,33 @@ fun MainScreen() {
         mutableStateOf(
             !modelDownloader.isModelDownloaded(com.example.engine.ModelDownloader.ModelType.VOSK_DE) &&
             !modelDownloader.isModelDownloaded(com.example.engine.ModelDownloader.ModelType.VOSK_EN) &&
-            !modelDownloader.isModelDownloaded(com.example.engine.ModelDownloader.ModelType.WHISPER_TINY)
+            !modelDownloader.isModelDownloaded(com.example.engine.ModelDownloader.ModelType.WHISPER_TINY) &&
+            !modelDownloader.isModelDownloaded(com.example.engine.ModelDownloader.ModelType.WHISPER_BASE) &&
+            !modelDownloader.isModelDownloaded(com.example.engine.ModelDownloader.ModelType.WHISPER_SMALL)
         )
     }
     var uiLanguage by remember { mutableStateOf(settingsManager.uiLanguage) }
     var currentTab by remember { mutableIntStateOf(0) }
+    
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(context, "Notification permission is required for Notification Mode.", Toast.LENGTH_LONG).show()
+        }
+    }
+    
+    LaunchedEffect(settingsManager.showAsNotification) {
+        if (settingsManager.showAsNotification && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!hasPermission) {
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
 
     val appVersion = remember {
         try {
@@ -936,9 +963,18 @@ fun MainScreen() {
                                 var showAsNotification by remember { mutableStateOf(settingsManager.showAsNotification) }
                                 Switch(
                                     checked = showAsNotification,
-                                    onCheckedChange = {
-                                        showAsNotification = it
-                                        settingsManager.showAsNotification = it
+                                    onCheckedChange = { checked ->
+                                        if (checked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                            val hasPermission = ContextCompat.checkSelfPermission(
+                                                context,
+                                                Manifest.permission.POST_NOTIFICATIONS
+                                            ) == PackageManager.PERMISSION_GRANTED
+                                            if (!hasPermission) {
+                                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                            }
+                                        }
+                                        showAsNotification = checked
+                                        settingsManager.showAsNotification = checked
                                     },
                                     colors = SwitchDefaults.colors(
                                         checkedThumbColor = SleekButtonText,
@@ -1127,6 +1163,10 @@ fun MainScreen() {
                         else -> com.example.engine.ModelDownloader.ModelType.VOSK_EN
                     }
                     
+                    val isSelectedModelDownloaded = remember(selectedModel, modelUpdateTrigger) {
+                        modelDownloader.isModelDownloaded(selectedModel)
+                    }
+                    
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     if (downloadProgress >= 0f) {
@@ -1150,18 +1190,22 @@ fun MainScreen() {
                     } else {
                         Button(
                             onClick = {
-                                downloadProgress = 0f
-                                scope.launch {
-                                    try {
-                                        modelDownloader.downloadModel(selectedModel) { progress ->
-                                            downloadProgress = progress
+                                if (isSelectedModelDownloaded) {
+                                    showOnboarding = false
+                                } else {
+                                    downloadProgress = 0f
+                                    scope.launch {
+                                        try {
+                                            modelDownloader.downloadModel(selectedModel) { progress ->
+                                                downloadProgress = progress
+                                            }
+                                            modelUpdateTrigger++
+                                            showOnboarding = false
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                        } finally {
+                                            downloadProgress = -1f
                                         }
-                                        modelUpdateTrigger++
-                                        showOnboarding = false
-                                    } catch (e: Exception) {
-                                        Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
-                                    } finally {
-                                        downloadProgress = -1f
                                     }
                                 }
                             },
@@ -1169,10 +1213,14 @@ fun MainScreen() {
                             colors = ButtonDefaults.buttonColors(containerColor = SleekPrimary, contentColor = SleekButtonText)
                         ) {
                             Text(
-                                text = String.format(
-                                    Localization.getString("onboarding_download_btn", uiLanguage),
-                                    selectedModel.sizeLabel
-                                )
+                                text = if (isSelectedModelDownloaded) {
+                                    Localization.getString("onboarding_start_btn", uiLanguage)
+                                } else {
+                                    String.format(
+                                        Localization.getString("onboarding_download_btn", uiLanguage),
+                                        selectedModel.sizeLabel
+                                    )
+                                }
                             )
                         }
                     }
