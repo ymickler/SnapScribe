@@ -144,12 +144,12 @@ jobs:
         run: |
           VERSION_NUM="${{ env.VERSION }}"
           VERSION_NUM="${VERSION_NUM#v}"
-          ./gradlew :app:assembleDebug -PversionName="$VERSION_NUM" --stacktrace
+          ./gradlew :app:assembleRelease -PversionName="$VERSION_NUM" --stacktrace
 
       - name: Prepare Release Asset
         run: |
           mkdir -p release-artifacts
-          cp app/build/outputs/apk/debug/${{ env.APP_NAME }}-debug.apk release-artifacts/${{ env.APP_NAME }}.apk
+          cp app/build/outputs/apk/release/${{ env.APP_NAME }}-release.apk release-artifacts/${{ env.APP_NAME }}.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
