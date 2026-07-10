@@ -535,22 +535,27 @@ class TranscriptionOverlayService : Service() {
         val settings = DependencyProvider.getSettingsManager(this)
         if (!settings.showAsNotification) return
         
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val title = com.example.data.Localization.getString("notification_title_started", settings.uiLanguage)
-        
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(status)
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setSilent(true)
-            .setProgress(100, (progress * 100).toInt(), false)
+        CoroutineScope(Dispatchers.Main).launch {
+            val title = com.example.data.Localization.getString("notification_title_started", settings.uiLanguage)
             
-        if (partialText.isNotEmpty()) {
-            builder.setStyle(NotificationCompat.BigTextStyle().bigText("$status\n\n$partialText"))
+            val builder = NotificationCompat.Builder(this@TranscriptionOverlayService, CHANNEL_ID)
+                .setContentTitle(title)
+                .setContentText(status)
+                .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setSilent(true)
+                .setProgress(100, (progress * 100).toInt(), false)
+                
+            if (partialText.isNotEmpty()) {
+                builder.setStyle(NotificationCompat.BigTextStyle().bigText("$status\n\n$partialText"))
+            }
+            
+            try {
+                startForeground(NOTIFICATION_ID, builder.build())
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
-        
-        notificationManager.notify(NOTIFICATION_ID, builder.build())
     }
 
     private fun showCompletedNotification(context: Context, id: Int, fullText: String) {
