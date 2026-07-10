@@ -6,11 +6,15 @@ on:
       - main
     paths:
       - 'app/**'
+      - '!app/**/*.md'
       - 'gradle/**'
+      - '!gradle/**/*.md'
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
       - 'gradle.properties'
       - '.github/workflows/**'
+      - '!**/*.md'
+      - '!LICENSE'
   workflow_dispatch:
     inputs:
       release_type:

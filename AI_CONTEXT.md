@@ -107,6 +107,7 @@ SnapScribe utilizes an on-the-fly custom translation helper to prevent screen re
 ## 🚀 7. CI/CD & Auto-Versioning
 * **GitHub Actions Release CI (`release.yml`):**
   * Triggered automatically on push to the `main` branch or manually via `workflow_dispatch`.
+  * **Path Filtering (No Release for Docs/License):** Push events will *only* trigger a release if source code or build configuration files are modified. Changes restricted solely to documentation (`**/*.md`) or the `LICENSE` file are explicitly ignored via negative path patterns to prevent unnecessary release runs.
   * **Conventional Commits Auto-Versioning:** On automatic push to `main` (usually when a pull request is merged), the workflow parses the commit message of the merged commit to automatically determine the version increment:
     * **Major Bump (`vA.0.0`):** Triggered if the commit message contains `BREAKING CHANGE`, `breaking:`, or an exclamation mark suffix (e.g. `feat!:`).
     * **Minor Bump (`vX.B.0`):** Triggered if the commit message starts with `feat:` or `feat(`.
