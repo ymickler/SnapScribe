@@ -17,8 +17,19 @@ class ModelDownloader(private val context: Context) {
         VOSK_EN("vosk", "en", "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip", true, "vosk-model-small-en-us-0.15", "~40 MB"),
         WHISPER_TINY("whisper", "tiny", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin", false, "ggml-tiny.bin", "~75 MB"),
         WHISPER_BASE("whisper", "base", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin", false, "ggml-base.bin", "~140 MB"),
-        WHISPER_SMALL("whisper", "small", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin", false, "ggml-small.bin", "~460 MB")
+        WHISPER_SMALL("whisper", "small", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin", false, "ggml-small.bin", "~460 MB");
+
+        val displayLabel: String
+            get() = when (this) {
+                VOSK_DE -> "Vosk (DE)"
+                VOSK_EN -> "Vosk (EN)"
+                WHISPER_TINY -> "Whisper Tiny"
+                WHISPER_BASE -> "Whisper Base"
+                WHISPER_SMALL -> "Whisper Small"
+            }
     }
+
+    fun installedModels(): List<ModelType> = ModelType.values().filter { isModelDownloaded(it) }
 
     private val client = OkHttpClient()
     private val modelsDir = File(context.filesDir, "models")

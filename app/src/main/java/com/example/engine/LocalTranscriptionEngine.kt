@@ -22,6 +22,7 @@ class LocalTranscriptionEngine(
 
     interface TranscriptionCallback {
         fun onStart()
+        fun onModelResolved(modelType: ModelDownloader.ModelType) {}
         fun onProgress(progress: Float)
         fun onPartialResult(text: String)
         fun onComplete(fullText: String)
@@ -30,7 +31,8 @@ class LocalTranscriptionEngine(
 
     fun transcribeAudio(
         audioUri: Uri,
-        callback: TranscriptionCallback
+        callback: TranscriptionCallback,
+        modelOverride: ModelDownloader.ModelType? = null
     ) {
         CoroutineScope(dispatcher).launch {
             var convertedWavFile: File? = null
@@ -40,7 +42,7 @@ class LocalTranscriptionEngine(
                 val engineType = settingsManager.sttEngine
                 val langCode = settingsManager.getTargetLanguageCode()
 
-                val modelType = when {
+                val modelType = modelOverride ?: when {
                     engineType == "whisper" -> {
                         when (settingsManager.whisperModelSize) {
                             "base" -> ModelDownloader.ModelType.WHISPER_BASE
@@ -53,10 +55,12 @@ class LocalTranscriptionEngine(
                 }
 
                 if (!downloader.isModelDownloaded(modelType)) {
-                    callback.onError("Model not downloaded for $engineType ($langCode). Please download it in settings.")
+                    callback.onError("Model not downloaded for ${modelType.engine} (${modelType.language}). Please download it in settings.")
                     return@launch
                 }
-                
+
+                callback.onModelResolved(modelType)
+
                 val modelPath = downloader.getModelPath(modelType)
 
                 // 1. Copy URI to a temporary file
@@ -77,7 +81,7 @@ class LocalTranscriptionEngine(
                 convertedWavFile = File(wavPath)
 
                 // 3. Transcribe
-                val engine: STTEngine = if (engineType == "whisper") WhisperEngineImpl() else VoskEngineImpl()
+                val engine: STTEngine = if (modelType.engine == "whisper") WhisperEngineImpl() else VoskEngineImpl()
                 
                 val fullText = engine.transcribe(
                     context = context,
