@@ -78,6 +78,8 @@ jobs:
 
       - name: Generate Version Tag
         id: versioning
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           # Fetch all tags to determine the latest release tag
           git fetch --tags --force || true
@@ -119,10 +121,6 @@ jobs:
             fi
           else
             # Triggered automatically on push to main: detect change type via conventional commit message
-            COMMIT_MSG=$(cat <<'EOF'
-${{ github.event.head_commit.message }}
-EOF
-)
             echo "Commit message: $COMMIT_MSG"
             
             RELEASE_TYPE="patch"
