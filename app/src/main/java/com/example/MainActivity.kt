@@ -630,6 +630,148 @@ fun MainScreen() {
                         }
                     }
 
+                    // STT Engine & Model Management Card
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(24.dp)),
+                        colors = CardDefaults.cardColors(containerColor = SleekSurface)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Text(
+                                text = "STT Engine & Models",
+                                color = SleekPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Choose your transcription engine and manage local offline models to save storage space.",
+                                color = SleekText.copy(alpha = 0.6f),
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            var selectedEngine by remember { mutableStateOf(settingsManager.sttEngine) }
+                            val engineOptions = listOf(
+                                "vosk" to "Vosk (Fast)",
+                                "whisper" to "Whisper (Accurate)"
+                            )
+
+                            // Engine Selection
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                engineOptions.forEach { (code, label) ->
+                                    val isSelected = selectedEngine == code
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(if (isSelected) SleekPrimary else SleekInnerSurface)
+                                            .clickable {
+                                                selectedEngine = code
+                                                settingsManager.sttEngine = code
+                                                Toast.makeText(context, "Engine changed to $label", Toast.LENGTH_SHORT).show()
+                                            }
+                                            .padding(vertical = 10.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = label,
+                                            color = if (isSelected) SleekButtonText else SleekText,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // Model Download Status
+                            val modelDownloader = remember { com.example.engine.ModelDownloader(context) }
+                            val coroutineScope = rememberCoroutineScope()
+                            
+                            val requiredModel = when {
+                                selectedEngine == "whisper" -> com.example.engine.ModelDownloader.ModelType.WHISPER_TINY
+                                settingsManager.getTargetLanguageCode() == "de" -> com.example.engine.ModelDownloader.ModelType.VOSK_DE
+                                else -> com.example.engine.ModelDownloader.ModelType.VOSK_EN
+                            }
+                            
+                            var isDownloaded by remember(requiredModel) { mutableStateOf(modelDownloader.isModelDownloaded(requiredModel)) }
+                            var downloadProgress by remember { mutableStateOf(-1f) }
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Required Model: ${requiredModel.folderName}",
+                                        color = SleekText,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = if (isDownloaded) "Status: Downloaded" else if (downloadProgress >= 0f) "Status: Downloading (${(downloadProgress * 100).toInt()}%)" else "Status: Not Downloaded",
+                                        color = if (isDownloaded) Color(0xFF4CAF50) else if (downloadProgress >= 0f) SleekPrimary else SleekText.copy(alpha = 0.5f),
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.width(16.dp))
+                                
+                                if (isDownloaded) {
+                                    OutlinedButton(
+                                        onClick = { 
+                                            modelDownloader.deleteModel(requiredModel)
+                                            isDownloaded = false
+                                        },
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF44336)),
+                                        border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp, brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFF44336).copy(alpha = 0.5f))),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text("Delete", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                } else {
+                                    Button(
+                                        onClick = {
+                                            if (downloadProgress < 0f) {
+                                                downloadProgress = 0f
+                                                coroutineScope.launch {
+                                                    try {
+                                                        modelDownloader.downloadModel(requiredModel) { progress ->
+                                                            downloadProgress = progress
+                                                        }
+                                                        isDownloaded = true
+                                                    } catch (e: Exception) {
+                                                        Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                                    } finally {
+                                                        downloadProgress = -1f
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        enabled = downloadProgress < 0f,
+                                        colors = ButtonDefaults.buttonColors(containerColor = SleekPrimary, contentColor = SleekButtonText),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text(if (downloadProgress >= 0f) "Downloading..." else "Download", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Notification Mode Toggle Card
                     Card(
                         modifier = Modifier

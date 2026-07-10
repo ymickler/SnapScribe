@@ -13,6 +13,7 @@ class SettingsManager(context: Context) {
         private const val KEY_ENCRYPTION = "enable_encryption"
         private const val KEY_GEMINI_API_KEY = "gemini_api_key"
         private const val KEY_SHOW_AS_NOTIFICATION = "show_as_notification"
+        private const val KEY_STT_ENGINE = "stt_engine"
     }
 
     var language: String
@@ -34,6 +35,10 @@ class SettingsManager(context: Context) {
     var showAsNotification: Boolean
         get() = prefs.getBoolean(KEY_SHOW_AS_NOTIFICATION, false)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_AS_NOTIFICATION, value).apply()
+
+    var sttEngine: String
+        get() = prefs.getString(KEY_STT_ENGINE, "vosk") ?: "vosk"
+        set(value) = prefs.edit().putString(KEY_STT_ENGINE, value).apply()
 
     fun getTargetLanguageCode(): String {
         val selected = language
