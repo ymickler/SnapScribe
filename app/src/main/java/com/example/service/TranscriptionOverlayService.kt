@@ -484,7 +484,7 @@ class TranscriptionOverlayService : Service() {
                                     ) {
                                         Text(
                                             text = com.example.data.Localization.getString("overlay_model_label", settings.uiLanguage) +
-                                                " " + (currentModelType?.displayLabel ?: ""),
+                                                " " + (currentModelType?.let { "${it.displayLabel} (${it.sizeLabel})" } ?: ""),
                                             color = SleekText,
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold
@@ -503,7 +503,7 @@ class TranscriptionOverlayService : Service() {
                                     ) {
                                         installedModels.forEach { model ->
                                             DropdownMenuItem(
-                                                text = { Text(model.displayLabel) },
+                                                text = { Text("${model.displayLabel} (${model.sizeLabel})") },
                                                 leadingIcon = if (model == currentModelType) {
                                                     { Icon(imageVector = Icons.Default.Check, contentDescription = null) }
                                                 } else null,
