@@ -85,6 +85,7 @@ class TranscriptionOverlayService : Service() {
     private var isCompleted by mutableStateOf(false)
     private var isError by mutableStateOf(false)
     private var errorMsg by mutableStateOf("")
+    private var showCancelConfirmation by mutableStateOf(false)
     private var currentAudioUriString: String = ""
 
     override fun onCreate() {
@@ -245,155 +246,204 @@ class TranscriptionOverlayService : Service() {
             colors = CardDefaults.cardColors(containerColor = SleekSurface),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = getString(R.string.app_name) + " Transcriber",
-                            color = SleekPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
-                        Text(
-                            text = if (isError) "Failed to process voice" else transcriptionStatus,
-                            color = SleekText.copy(alpha = 0.7f),
-                            fontSize = 12.sp
-                        )
-                    }
-
-                    // Display targeted language badge
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .background(SleekBackground, RoundedCornerShape(8.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = displayLang,
-                                color = SleekPrimary,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        IconButton(
-                            onClick = { dismissOverlayAndStop() },
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(SleekBackground)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = SleekText,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Progress Indicator
-                if (!isCompleted && !isError) {
-                    LinearProgressIndicator(
-                        progress = { transcriptionProgress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp)),
+            if (showCancelConfirmation) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = com.example.data.Localization.getString("cancel_dialog_title", settings.uiLanguage),
                         color = SleekPrimary,
-                        trackColor = SleekInnerSurface,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                // Error message
-                if (isError) {
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Error: $errorMsg",
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 13.sp,
-                        modifier = Modifier.fillMaxWidth()
+                        text = com.example.data.Localization.getString("cancel_dialog_desc", settings.uiLanguage),
+                        color = SleekText,
+                        fontSize = 14.sp
                     )
-                } else {
-                    // Transcribed text display
-                    val displayText = transcribedText.ifEmpty { "Waiting for offline voice segments..." }
-                    Text(
-                        text = displayText,
-                        color = SleekText.copy(alpha = if (transcribedText.isEmpty()) 0.4f else 0.95f),
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        maxLines = 5,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                // Action panel once completed
-                AnimatedVisibility(visible = isCompleted) {
-                    Column {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                showCancelConfirmation = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = SleekInnerSurface, contentColor = SleekText),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Button(
-                                onClick = {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText("Transcription", transcribedText)
-                                    clipboard.setPrimaryClip(clip)
-                                    Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = SleekPrimary,
-                                    contentColor = SleekButtonText
-                                ),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Copy",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Copy", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
+                            Text(com.example.data.Localization.getString("cancel_dialog_btn_keep", settings.uiLanguage), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Button(
+                            onClick = {
+                                dismissOverlayAndStop()
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = SleekPrimary, contentColor = SleekButtonText),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(com.example.data.Localization.getString("cancel_dialog_btn_cancel", settings.uiLanguage), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            } else {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = getString(R.string.app_name) + " Transcriber",
+                                color = SleekPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = if (isError) "Failed to process voice" else transcriptionStatus,
+                                color = SleekText.copy(alpha = 0.7f),
+                                fontSize = 12.sp
+                            )
+                        }
 
-                            Button(
-                                onClick = {
-                                    val intent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_TEXT, transcribedText)
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        // Display targeted language badge
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .background(SleekBackground, RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = displayLang,
+                                    color = SleekPrimary,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            IconButton(
+                                onClick = { 
+                                    if (!isCompleted && !isError) {
+                                        showCancelConfirmation = true
+                                    } else {
+                                        dismissOverlayAndStop()
                                     }
-                                    val chooser = Intent.createChooser(intent, "Share Text").apply {
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                    }
-                                    context.startActivity(chooser)
                                 },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = SleekInnerSurface,
-                                    contentColor = SleekText
-                                ),
-                                shape = RoundedCornerShape(12.dp)
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(SleekBackground)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Share,
-                                    contentDescription = "Share",
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close",
                                     tint = SleekText,
                                     modifier = Modifier.size(16.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Share", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Progress Indicator
+                    if (!isCompleted && !isError) {
+                        LinearProgressIndicator(
+                            progress = { transcriptionProgress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = SleekPrimary,
+                            trackColor = SleekInnerSurface,
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // Error message
+                    if (isError) {
+                        Text(
+                            text = "Error: $errorMsg",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 13.sp,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        // Transcribed text display
+                        val displayText = transcribedText.ifEmpty { "Waiting for offline voice segments..." }
+                        Text(
+                            text = displayText,
+                            color = SleekText.copy(alpha = if (transcribedText.isEmpty()) 0.4f else 0.95f),
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            maxLines = 5,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    // Action panel once completed
+                    AnimatedVisibility(visible = isCompleted) {
+                        Column {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clip = ClipData.newPlainText("Transcription", transcribedText)
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = SleekPrimary,
+                                        contentColor = SleekButtonText
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = "Copy",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Copy", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Button(
+                                    onClick = {
+                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_TEXT, transcribedText)
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                        val chooser = Intent.createChooser(intent, "Share Text").apply {
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                        context.startActivity(chooser)
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = SleekInnerSurface,
+                                        contentColor = SleekText
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Share,
+                                        contentDescription = "Share",
+                                        tint = SleekText,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Share", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }

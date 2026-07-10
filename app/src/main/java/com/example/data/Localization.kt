@@ -70,7 +70,11 @@ object Localization {
             "onboarding_downloading" to "Downloading: %d%%",
             "banner_model_required_title" to "Offline Model Required",
             "banner_model_required_desc" to "SnapScribe requires a model to transcribe voice messages offline. Currently selected: %s (%s).",
-            "banner_model_required_btn" to "Go to Settings to Download"
+            "banner_model_required_btn" to "Go to Settings to Download",
+            "cancel_dialog_title" to "Cancel Transcription?",
+            "cancel_dialog_desc" to "Are you sure you want to cancel the ongoing offline transcription?",
+            "cancel_dialog_btn_keep" to "No, keep going",
+            "cancel_dialog_btn_cancel" to "Yes, cancel"
         ),
         "de" to mapOf(
             "app_name" to "SnapScribe",
@@ -134,7 +138,11 @@ object Localization {
             "onboarding_downloading" to "Lade herunter: %d%%",
             "banner_model_required_title" to "Offline-Modell erforderlich",
             "banner_model_required_desc" to "SnapScribe benötigt ein Modell, um Sprachnachrichten offline zu transkribieren. Aktuell ausgewählt: %s (%s).",
-            "banner_model_required_btn" to "Zum Herunterladen in die Einstellungen"
+            "banner_model_required_btn" to "Zum Herunterladen in die Einstellungen",
+            "cancel_dialog_title" to "Transkription abbrechen?",
+            "cancel_dialog_desc" to "Möchtest du die laufende Offline-Transkription wirklich abbrechen?",
+            "cancel_dialog_btn_keep" to "Nein, weiterlaufen lassen",
+            "cancel_dialog_btn_cancel" to "Ja, abbrechen"
         )
     )
 
