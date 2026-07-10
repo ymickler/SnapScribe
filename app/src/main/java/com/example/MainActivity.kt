@@ -390,7 +390,7 @@ fun MainScreen() {
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Offline Model Required",
+                                    text = Localization.getString("banner_model_required_title", uiLanguage),
                                     color = SleekPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp
@@ -398,7 +398,11 @@ fun MainScreen() {
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "SnapScribe requires a model to transcribe voice messages offline. Currently selected: ${activeRequiredModel.folderName} (${activeRequiredModel.sizeLabel}).",
+                                text = String.format(
+                                    Localization.getString("banner_model_required_desc", uiLanguage),
+                                    activeRequiredModel.folderName,
+                                    activeRequiredModel.sizeLabel
+                                ),
                                 color = SleekText.copy(alpha = 0.8f),
                                 fontSize = 14.sp
                             )
@@ -412,7 +416,7 @@ fun MainScreen() {
                                     contentColor = SleekButtonText
                                 )
                             ) {
-                                Text("Go to Settings to Download")
+                                Text(Localization.getString("banner_model_required_btn", uiLanguage))
                             }
                         }
                     }
@@ -1027,7 +1031,7 @@ fun MainScreen() {
             onDismissRequest = { /* Prevent dismiss on outside click */ },
             title = {
                 Text(
-                    text = "Setup Offline Transcription",
+                    text = Localization.getString("onboarding_title", uiLanguage),
                     color = SleekPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
@@ -1036,7 +1040,7 @@ fun MainScreen() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "To transcribe voice messages offline without any cloud keys, SnapScribe needs to download a small language model. Please choose your preferences below.",
+                        text = Localization.getString("onboarding_desc", uiLanguage),
                         color = SleekText,
                         fontSize = 13.sp,
                         lineHeight = 18.sp
@@ -1046,7 +1050,7 @@ fun MainScreen() {
                     var wizardLang by remember { mutableStateOf(settingsManager.language) }
                     var wizardWhisperSize by remember { mutableStateOf(settingsManager.whisperModelSize) }
                     
-                    Text("1. Select Transcription Engine:", fontWeight = FontWeight.Bold, color = SleekText, fontSize = 12.sp)
+                    Text(Localization.getString("onboarding_engine_title", uiLanguage), fontWeight = FontWeight.Bold, color = SleekText, fontSize = 12.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("vosk" to "Vosk (Fast)", "whisper" to "Whisper (Accurate)").forEach { (code, label) ->
                             val isSelected = wizardEngine == code
@@ -1068,7 +1072,7 @@ fun MainScreen() {
                     }
                     
                     if (wizardEngine == "vosk") {
-                        Text("2. Select Language:", fontWeight = FontWeight.Bold, color = SleekText, fontSize = 12.sp)
+                        Text(Localization.getString("onboarding_lang_title", uiLanguage), fontWeight = FontWeight.Bold, color = SleekText, fontSize = 12.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf("de" to "Deutsch", "en" to "English").forEach { (code, label) ->
                                 val isSelected = wizardLang == code
@@ -1089,7 +1093,7 @@ fun MainScreen() {
                             }
                         }
                     } else {
-                        Text("2. Select Whisper Model Size:", fontWeight = FontWeight.Bold, color = SleekText, fontSize = 12.sp)
+                        Text(Localization.getString("onboarding_whisper_size_title", uiLanguage), fontWeight = FontWeight.Bold, color = SleekText, fontSize = 12.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf("tiny" to "Tiny (~75MB)", "base" to "Base (~140MB)", "small" to "Small (~460MB)").forEach { (code, label) ->
                                 val isSelected = wizardWhisperSize == code
@@ -1134,7 +1138,14 @@ fun MainScreen() {
                                 modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("Downloading: ${(downloadProgress * 100).toInt()}%", fontSize = 12.sp, color = SleekPrimary)
+                            Text(
+                                text = String.format(
+                                    Localization.getString("onboarding_downloading", uiLanguage),
+                                    (downloadProgress * 100).toInt()
+                                ),
+                                fontSize = 12.sp,
+                                color = SleekPrimary
+                            )
                         }
                     } else {
                         Button(
@@ -1157,7 +1168,12 @@ fun MainScreen() {
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = SleekPrimary, contentColor = SleekButtonText)
                         ) {
-                            Text("Download (${selectedModel.sizeLabel}) & Start")
+                            Text(
+                                text = String.format(
+                                    Localization.getString("onboarding_download_btn", uiLanguage),
+                                    selectedModel.sizeLabel
+                                )
+                            )
                         }
                     }
                 }
@@ -1166,7 +1182,7 @@ fun MainScreen() {
             dismissButton = {
                 if (downloadProgress < 0f) {
                     TextButton(onClick = { showOnboarding = false }) {
-                        Text("Skip Setup", color = SleekText.copy(alpha = 0.6f))
+                        Text(Localization.getString("onboarding_skip_btn", uiLanguage), color = SleekText.copy(alpha = 0.6f))
                     }
                 }
             },

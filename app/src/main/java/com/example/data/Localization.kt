@@ -59,7 +59,18 @@ object Localization {
             "toast_service_started" to "Transcription started in background",
             "sandbox_header" to "Preview Sandbox",
             "sandbox_desc" to "Simulate incoming WhatsApp audio shares to test SnapScribe in the browser emulator.",
-            "sandbox_btn_simulate" to "Simulate Shared Audio"
+            "sandbox_btn_simulate" to "Simulate Shared Audio",
+            "onboarding_title" to "Setup Offline Transcription",
+            "onboarding_desc" to "To transcribe voice messages offline without any cloud keys, SnapScribe needs to download a small language model. Please choose your preferences below.",
+            "onboarding_engine_title" to "1. Select Transcription Engine:",
+            "onboarding_lang_title" to "2. Select Language:",
+            "onboarding_whisper_size_title" to "2. Select Whisper Model Size:",
+            "onboarding_download_btn" to "Download (%s) & Start",
+            "onboarding_skip_btn" to "Skip Setup",
+            "onboarding_downloading" to "Downloading: %d%%",
+            "banner_model_required_title" to "Offline Model Required",
+            "banner_model_required_desc" to "SnapScribe requires a model to transcribe voice messages offline. Currently selected: %s (%s).",
+            "banner_model_required_btn" to "Go to Settings to Download"
         ),
         "de" to mapOf(
             "app_name" to "SnapScribe",
@@ -112,7 +123,18 @@ object Localization {
             "toast_service_started" to "Transkription im Hintergrund gestartet",
             "sandbox_header" to "Vorschau Sandbox",
             "sandbox_desc" to "Simuliere geteilte WhatsApp-Audiodateien, um SnapScribe im Browser-Emulator zu testen.",
-            "sandbox_btn_simulate" to "Geteilte Sprachnachricht simulieren"
+            "sandbox_btn_simulate" to "Geteilte Sprachnachricht simulieren",
+            "onboarding_title" to "Offline-Transkription einrichten",
+            "onboarding_desc" to "Um Sprachnachrichten offline ohne Cloud-Schlüssel zu transkribieren, muss SnapScribe ein kleines Sprachmodell herunterladen. Bitte wähle unten deine Einstellungen.",
+            "onboarding_engine_title" to "1. Transkriptions-Engine auswählen:",
+            "onboarding_lang_title" to "2. Sprache auswählen:",
+            "onboarding_whisper_size_title" to "2. Whisper-Modellgröße auswählen:",
+            "onboarding_download_btn" to "Herunterladen (%s) & Starten",
+            "onboarding_skip_btn" to "Einrichtung überspringen",
+            "onboarding_downloading" to "Lade herunter: %d%%",
+            "banner_model_required_title" to "Offline-Modell erforderlich",
+            "banner_model_required_desc" to "SnapScribe benötigt ein Modell, um Sprachnachrichten offline zu transkribieren. Aktuell ausgewählt: %s (%s).",
+            "banner_model_required_btn" to "Zum Herunterladen in die Einstellungen"
         )
     )
 
