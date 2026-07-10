@@ -18,6 +18,9 @@ import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -236,6 +239,8 @@ class TranscriptionOverlayService : Service() {
         val displayLang = remember {
             if (settings.getTargetLanguageCode() == "de") "Deutsch (DE)" else "English (EN)"
         }
+        var isExpanded by remember { mutableStateOf(false) }
+        var canExpand by remember { mutableStateOf(false) }
 
         Card(
             modifier = Modifier
@@ -374,15 +379,48 @@ class TranscriptionOverlayService : Service() {
                     } else {
                         // Transcribed text display
                         val displayText = transcribedText.ifEmpty { "Waiting for offline voice segments..." }
-                        Text(
-                            text = displayText,
-                            color = SleekText.copy(alpha = if (transcribedText.isEmpty()) 0.4f else 0.95f),
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            maxLines = 5,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Column {
+                            Text(
+                                text = displayText,
+                                color = SleekText.copy(alpha = if (transcribedText.isEmpty()) 0.4f else 0.95f),
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp,
+                                maxLines = if (isExpanded) Int.MAX_VALUE else 5,
+                                overflow = TextOverflow.Ellipsis,
+                                onTextLayout = { textLayoutResult ->
+                                    if (!isExpanded) {
+                                        canExpand = textLayoutResult.hasVisualOverflow
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(
+                                        if (isExpanded) {
+                                            Modifier
+                                                .heightIn(max = 240.dp)
+                                                .verticalScroll(rememberScrollState())
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
+                            )
+                            if (canExpand || isExpanded) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = if (isExpanded) {
+                                        com.example.data.Localization.getString("btn_show_less", settings.uiLanguage)
+                                    } else {
+                                        com.example.data.Localization.getString("btn_show_more", settings.uiLanguage)
+                                    },
+                                    color = SleekPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier
+                                        .clickable { isExpanded = !isExpanded }
+                                        .padding(vertical = 4.dp)
+                                )
+                            }
+                        }
                     }
 
                     // Action panel once completed

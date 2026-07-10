@@ -74,7 +74,9 @@ object Localization {
             "cancel_dialog_title" to "Cancel Transcription?",
             "cancel_dialog_desc" to "Are you sure you want to cancel the ongoing offline transcription?",
             "cancel_dialog_btn_keep" to "No, keep going",
-            "cancel_dialog_btn_cancel" to "Yes, cancel"
+            "cancel_dialog_btn_cancel" to "Yes, cancel",
+            "btn_show_more" to "Show More",
+            "btn_show_less" to "Show Less"
         ),
         "de" to mapOf(
             "app_name" to "SnapScribe",
@@ -142,7 +144,9 @@ object Localization {
             "cancel_dialog_title" to "Transkription abbrechen?",
             "cancel_dialog_desc" to "Möchtest du die laufende Offline-Transkription wirklich abbrechen?",
             "cancel_dialog_btn_keep" to "Nein, weiterlaufen lassen",
-            "cancel_dialog_btn_cancel" to "Ja, abbrechen"
+            "cancel_dialog_btn_cancel" to "Ja, abbrechen",
+            "btn_show_more" to "Mehr anzeigen",
+            "btn_show_less" to "Weniger anzeigen"
         )
     )
 
