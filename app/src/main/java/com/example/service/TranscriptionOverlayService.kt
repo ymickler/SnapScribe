@@ -69,6 +69,8 @@ import com.example.ui.theme.SleekButtonText
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
 
 class TranscriptionOverlayService : Service() {
 
@@ -98,6 +100,7 @@ class TranscriptionOverlayService : Service() {
     private var showModelMenu by mutableStateOf(false)
     private var savedEntityId: Int? = null
     private var savedTimestamp: Long? = null
+    private var cachedLocalAudioFile: File? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -120,10 +123,29 @@ class TranscriptionOverlayService : Service() {
         }
     }
 
+    // The content:// URI shared by another app (e.g. WhatsApp) only grants us read access
+    // for a short-lived window tied to the sharing flow. Re-transcribing later (e.g. after
+    // switching models from the overlay) would then fail with a permission denial, so the
+    // source audio is copied into our own cache once, up front, and reused from there.
+    private fun cacheAudioLocally(sourceUriString: String): String? {
+        return try {
+            val sourceUri = Uri.parse(sourceUriString)
+            val cacheFile = File(cacheDir, "shared_audio_${System.currentTimeMillis()}.cache")
+            contentResolver.openInputStream(sourceUri)?.use { input ->
+                FileOutputStream(cacheFile).use { output -> input.copyTo(output) }
+            } ?: return null
+            cachedLocalAudioFile = cacheFile
+            Uri.fromFile(cacheFile).toString()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val audioUriString = intent?.getStringExtra(EXTRA_AUDIO_URI)
         if (audioUriString != null) {
-            currentAudioUriString = audioUriString
+            currentAudioUriString = cacheAudioLocally(audioUriString) ?: audioUriString
             startForeground(NOTIFICATION_ID, createNotification())
             lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_START)
             lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
@@ -136,7 +158,7 @@ class TranscriptionOverlayService : Service() {
             } else {
                 showOverlay()
             }
-            startTranscription(audioUriString)
+            startTranscription(currentAudioUriString)
         } else {
             stopSelf()
         }
@@ -718,6 +740,7 @@ class TranscriptionOverlayService : Service() {
             }
             composeView = null
         }
+        cachedLocalAudioFile?.delete()
         lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
         lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
