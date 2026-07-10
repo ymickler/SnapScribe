@@ -26,27 +26,7 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
-  val debugKeystoreFile = file("${rootDir}/debug.keystore")
-  val generateDebugKeystoreTask = tasks.register<Exec>("generateDebugKeystore") {
-    val debugKeystoreFileLocal = debugKeystoreFile
-    outputs.file(debugKeystoreFileLocal)
-    onlyIf { !debugKeystoreFileLocal.exists() }
-    commandLine(
-      "keytool", "-genkey", "-v",
-      "-keystore", debugKeystoreFileLocal.absolutePath,
-      "-storepass", "android",
-      "-alias", "androiddebugkey",
-      "-keypass", "android",
-      "-keyalg", "RSA",
-      "-keysize", "2048",
-      "-validity", "10000",
-      "-dname", "CN=Android Debug, O=Android, C=US"
-    )
-  }
-
-  tasks.matching { it.name == "preBuild" || it.name == "validateSigningDebug" }.configureEach {
-    dependsOn(generateDebugKeystoreTask)
-  }
+  val debugKeystoreFile = file("${rootDir}/shared.keystore")
 
   signingConfigs {
     create("release") {
