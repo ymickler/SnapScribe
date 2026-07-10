@@ -3,6 +3,7 @@ package com.example.engine
 import dev.ffmpegkit.whisper.Whisper
 import dev.ffmpegkit.whisper.WhisperConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -15,14 +16,32 @@ class WhisperEngineImpl : STTEngine {
         onPartial: (String) -> Unit
     ): String = withContext(Dispatchers.IO) {
         
-        onProgress(0.1f)
+        onProgress(0.05f)
         onPartial("...") 
         
         var fullText = ""
         var whisperModel: dev.ffmpegkit.whisper.WhisperModel? = null
+        
+        // Launch helper coroutine to smoothly transition progress while Whisper transcribes
+        val progressJob = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+            var currentProgress = 0.05f
+            while (currentProgress < 0.95f) {
+                kotlinx.coroutines.delay(500)
+                val increment = when {
+                    currentProgress < 0.3f -> 0.02f
+                    currentProgress < 0.6f -> 0.015f
+                    currentProgress < 0.85f -> 0.008f
+                    else -> 0.002f
+                }
+                currentProgress = (currentProgress + increment).coerceAtMost(0.95f)
+                onProgress(currentProgress)
+            }
+        }
+
         try {
             // Whisper.loadModel(context, modelPath, ...) is suspend
             whisperModel = Whisper.loadModel(context, modelPath)
+            onProgress(0.15f)
             
             // Assuming default config if we pass null or empty config
             val config = WhisperConfig()
@@ -36,6 +55,7 @@ class WhisperEngineImpl : STTEngine {
             e.printStackTrace()
             throw Exception("Whisper transcription failed: ${e.message}")
         } finally {
+            progressJob.cancel()
             if (whisperModel != null) {
                 Whisper.releaseModel(whisperModel)
             }

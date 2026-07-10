@@ -131,7 +131,20 @@ class TranscriptionOverlayService : Service() {
             }
 
             override fun onProgress(progress: Float) {
-                transcriptionStatus = "Transcribing voice message..."
+                val engineType = settings.sttEngine
+                val isWhisper = engineType == "whisper"
+                transcriptionStatus = when {
+                    isWhisper -> {
+                        when {
+                            progress < 0.15f -> "Loading Whisper model..."
+                            progress < 0.4f -> "Analyzing audio waves..."
+                            progress < 0.7f -> "Decoding speech patterns..."
+                            progress < 0.9f -> "Synthesizing text..."
+                            else -> "Finishing up..."
+                        }
+                    }
+                    else -> "Transcribing... (${(progress * 100).toInt()}%)"
+                }
                 transcriptionProgress = progress
             }
 
