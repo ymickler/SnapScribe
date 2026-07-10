@@ -24,8 +24,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -56,6 +58,7 @@ import com.example.R
 import com.example.DependencyProvider
 import com.example.data.TranscriptionEntity
 import com.example.engine.LocalTranscriptionEngine
+import com.example.engine.ModelDownloader
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.SleekBackground
 import com.example.ui.theme.SleekInnerSurface
@@ -90,11 +93,31 @@ class TranscriptionOverlayService : Service() {
     private var errorMsg by mutableStateOf("")
     private var showCancelConfirmation by mutableStateOf(false)
     private var currentAudioUriString: String = ""
+    private var currentModelType by mutableStateOf<ModelDownloader.ModelType?>(null)
+    private var installedModels by mutableStateOf<List<ModelDownloader.ModelType>>(emptyList())
+    private var showModelMenu by mutableStateOf(false)
+    private var savedEntityId: Int? = null
+    private var savedTimestamp: Long? = null
 
     override fun onCreate() {
         super.onCreate()
         lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        ensureNotificationChannel()
+    }
+
+    // Channel importance is fixed the first time it's created, so it must only be
+    // created once, and always with the same importance, or later changes are silently ignored.
+    private fun ensureNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                getString(R.string.app_name),
+                NotificationManager.IMPORTANCE_DEFAULT
+            )
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -106,6 +129,7 @@ class TranscriptionOverlayService : Service() {
             lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
 
             val settings = DependencyProvider.getSettingsManager(this)
+            installedModels = ModelDownloader(this).installedModels()
             if (settings.showAsNotification) {
                 val toastMsg = com.example.data.Localization.getString("toast_service_started", settings.uiLanguage)
                 Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
@@ -119,25 +143,38 @@ class TranscriptionOverlayService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun startTranscription(uriString: String) {
+    private fun startTranscription(uriString: String, modelOverride: ModelDownloader.ModelType? = null) {
         val context = this
         val uri = Uri.parse(uriString)
         val engine = LocalTranscriptionEngine(context)
- 
+
         // Fetch settings for pre-selected language target
         val settings = DependencyProvider.getSettingsManager(context)
         val targetLanguage = settings.getTargetLanguageCode()
- 
+
+        if (modelOverride != null) {
+            // Re-transcribing with a manually picked model: reset the result view without
+            // touching the user's default engine/model settings.
+            isCompleted = false
+            isError = false
+            errorMsg = ""
+            transcribedText = ""
+            transcriptionProgress = 0f
+        }
+
         engine.transcribeAudio(uri, object : LocalTranscriptionEngine.TranscriptionCallback {
             override fun onStart() {
                 transcriptionStatus = "Loading Offline Engine..."
                 transcriptionProgress = 0.05f
                 updateForegroundNotification(transcriptionStatus, transcriptionProgress)
             }
- 
+
+            override fun onModelResolved(modelType: ModelDownloader.ModelType) {
+                currentModelType = modelType
+            }
+
             override fun onProgress(progress: Float) {
-                val engineType = settings.sttEngine
-                val isWhisper = engineType == "whisper"
+                val isWhisper = (currentModelType?.engine ?: settings.sttEngine) == "whisper"
                 transcriptionStatus = when {
                     isWhisper -> {
                         when {
@@ -165,18 +202,23 @@ class TranscriptionOverlayService : Service() {
                 transcriptionStatus = "Completed"
                 isCompleted = true
  
-                // Save to local database transparently (will be encrypted inside the repo)
+                // Save to local database transparently (will be encrypted inside the repo).
+                // If this is a re-transcription with a different model, update the same
+                // history entry in place instead of creating a duplicate.
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val repository = DependencyProvider.getRepository(context)
                         val entity = TranscriptionEntity(
+                            id = savedEntityId ?: 0,
                             audioUri = uriString,
                             transcribedText = fullText,
                             language = targetLanguage,
-                            timestamp = System.currentTimeMillis()
+                            timestamp = savedTimestamp ?: System.currentTimeMillis()
                         )
                         val id = repository.insert(entity)
- 
+                        savedEntityId = id.toInt()
+                        savedTimestamp = entity.timestamp
+
                         if (settings.showAsNotification) {
                             showCompletedNotification(context, id.toInt(), fullText)
                             stopSelf()
@@ -197,7 +239,7 @@ class TranscriptionOverlayService : Service() {
                     stopSelf()
                 }
             }
-        })
+        }, modelOverride)
     }
 
     private fun showOverlay() {
@@ -305,7 +347,7 @@ class TranscriptionOverlayService : Service() {
                     ) {
                         Column {
                             Text(
-                                text = getString(R.string.app_name) + " Transcriber",
+                                text = getString(R.string.app_name),
                                 color = SleekPrimary,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp
@@ -429,6 +471,53 @@ class TranscriptionOverlayService : Service() {
                     // Action panel once completed
                     AnimatedVisibility(visible = isCompleted) {
                         Column {
+                            if (installedModels.size > 1) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Box {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(SleekBackground)
+                                            .clickable { showModelMenu = true }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = com.example.data.Localization.getString("overlay_model_label", settings.uiLanguage) +
+                                                " " + (currentModelType?.displayLabel ?: ""),
+                                            color = SleekText,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowDown,
+                                            contentDescription = null,
+                                            tint = SleekText,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = showModelMenu,
+                                        onDismissRequest = { showModelMenu = false }
+                                    ) {
+                                        installedModels.forEach { model ->
+                                            DropdownMenuItem(
+                                                text = { Text(model.displayLabel) },
+                                                leadingIcon = if (model == currentModelType) {
+                                                    { Icon(imageVector = Icons.Default.Check, contentDescription = null) }
+                                                } else null,
+                                                onClick = {
+                                                    showModelMenu = false
+                                                    if (model != currentModelType) {
+                                                        startTranscription(currentAudioUriString, model)
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                             Spacer(modifier = Modifier.height(16.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -512,16 +601,6 @@ class TranscriptionOverlayService : Service() {
         val title = com.example.data.Localization.getString("notification_title_started", uiLanguage)
         val text = com.example.data.Localization.getString("notification_desc_started", uiLanguage)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "${getString(R.string.app_name)} Transcriber Service",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
-
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle(title)
             .setContentText(text)
@@ -568,15 +647,6 @@ class TranscriptionOverlayService : Service() {
         val btnShareText = com.example.data.Localization.getString("notification_action_share", uiLanguage)
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "${context.getString(R.string.app_name)} Transcriber Service",
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
-            notificationManager.createNotificationChannel(channel)
-        }
 
         val mainIntent = Intent(context, com.example.MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK

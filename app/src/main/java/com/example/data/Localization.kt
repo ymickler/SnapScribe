@@ -77,7 +77,8 @@ object Localization {
             "cancel_dialog_btn_keep" to "No, keep going",
             "cancel_dialog_btn_cancel" to "Yes, cancel",
             "btn_show_more" to "Show More",
-            "btn_show_less" to "Show Less"
+            "btn_show_less" to "Show Less",
+            "overlay_model_label" to "Model:"
         ),
         "de" to mapOf(
             "app_name" to "SnapScribe",
@@ -148,7 +149,8 @@ object Localization {
             "cancel_dialog_btn_keep" to "Nein, weiterlaufen lassen",
             "cancel_dialog_btn_cancel" to "Ja, abbrechen",
             "btn_show_more" to "Mehr anzeigen",
-            "btn_show_less" to "Weniger anzeigen"
+            "btn_show_less" to "Weniger anzeigen",
+            "overlay_model_label" to "Modell:"
         )
     )
 
