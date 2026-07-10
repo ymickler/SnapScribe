@@ -123,17 +123,18 @@ class TranscriptionOverlayService : Service() {
         val context = this
         val uri = Uri.parse(uriString)
         val engine = LocalTranscriptionEngine(context)
-
+ 
         // Fetch settings for pre-selected language target
         val settings = DependencyProvider.getSettingsManager(context)
         val targetLanguage = settings.getTargetLanguageCode()
-
+ 
         engine.transcribeAudio(uri, object : LocalTranscriptionEngine.TranscriptionCallback {
             override fun onStart() {
                 transcriptionStatus = "Loading Offline Engine..."
                 transcriptionProgress = 0.05f
+                updateForegroundNotification(transcriptionStatus, transcriptionProgress)
             }
-
+ 
             override fun onProgress(progress: Float) {
                 val engineType = settings.sttEngine
                 val isWhisper = engineType == "whisper"
@@ -150,18 +151,20 @@ class TranscriptionOverlayService : Service() {
                     else -> "Transcribing... (${(progress * 100).toInt()}%)"
                 }
                 transcriptionProgress = progress
+                updateForegroundNotification(transcriptionStatus, transcriptionProgress, transcribedText)
             }
-
+ 
             override fun onPartialResult(text: String) {
                 transcribedText = text
+                updateForegroundNotification(transcriptionStatus, transcriptionProgress, text)
             }
-
+ 
             override fun onComplete(fullText: String) {
                 transcribedText = fullText
                 transcriptionProgress = 1.0f
                 transcriptionStatus = "Completed"
                 isCompleted = true
-
+ 
                 // Save to local database transparently (will be encrypted inside the repo)
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
@@ -173,7 +176,7 @@ class TranscriptionOverlayService : Service() {
                             timestamp = System.currentTimeMillis()
                         )
                         val id = repository.insert(entity)
-
+ 
                         if (settings.showAsNotification) {
                             showCompletedNotification(context, id.toInt(), fullText)
                             stopSelf()
@@ -183,12 +186,12 @@ class TranscriptionOverlayService : Service() {
                     }
                 }
             }
-
+ 
             override fun onError(error: String) {
                 isError = true
                 errorMsg = error
                 transcriptionStatus = "Error occurred"
-
+ 
                 if (settings.showAsNotification) {
                     showErrorNotification(context, error)
                     stopSelf()
@@ -526,6 +529,28 @@ class TranscriptionOverlayService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setSilent(true)
             .build()
+    }
+
+    private fun updateForegroundNotification(status: String, progress: Float, partialText: String = "") {
+        val settings = DependencyProvider.getSettingsManager(this)
+        if (!settings.showAsNotification) return
+        
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val title = com.example.data.Localization.getString("notification_title_started", settings.uiLanguage)
+        
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(status)
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
+            .setProgress(100, (progress * 100).toInt(), false)
+            
+        if (partialText.isNotEmpty()) {
+            builder.setStyle(NotificationCompat.BigTextStyle().bigText("$status\n\n$partialText"))
+        }
+        
+        notificationManager.notify(NOTIFICATION_ID, builder.build())
     }
 
     private fun showCompletedNotification(context: Context, id: Int, fullText: String) {
