@@ -23,11 +23,13 @@ android {
   }
 
   val debugKeystoreFile = file("${rootDir}/debug.keystore")
-  if (!debugKeystoreFile.exists()) {
-    println("Generating local debug.keystore since it was missing...")
-    ProcessBuilder(
+  val generateDebugKeystoreTask = tasks.register<Exec>("generateDebugKeystore") {
+    val debugKeystoreFileLocal = debugKeystoreFile
+    outputs.file(debugKeystoreFileLocal)
+    onlyIf { !debugKeystoreFileLocal.exists() }
+    commandLine(
       "keytool", "-genkey", "-v",
-      "-keystore", debugKeystoreFile.absolutePath,
+      "-keystore", debugKeystoreFileLocal.absolutePath,
       "-storepass", "android",
       "-alias", "androiddebugkey",
       "-keypass", "android",
@@ -35,7 +37,11 @@ android {
       "-keysize", "2048",
       "-validity", "10000",
       "-dname", "CN=Android Debug, O=Android, C=US"
-    ).inheritIO().start().waitFor()
+    )
+  }
+
+  tasks.matching { it.name == "preBuild" || it.name == "validateSigningDebug" }.configureEach {
+    dependsOn(generateDebugKeystoreTask)
   }
 
   signingConfigs {

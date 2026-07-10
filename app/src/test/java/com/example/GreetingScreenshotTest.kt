@@ -36,7 +36,8 @@ class GreetingScreenshotTest {
           item = mockEntity,
           onCopy = {},
           onShare = {},
-          onDelete = {}
+          onDelete = {},
+          uiLanguage = "de"
         )
       }
     }

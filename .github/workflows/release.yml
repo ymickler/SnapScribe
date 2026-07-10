@@ -104,8 +104,31 @@ jobs:
               VERSION="v$major.$minor.$patch"
             fi
           else
-            # Triggered automatically on push to main (defaults to patch increment)
-            patch=$((patch + 1))
+            # Triggered automatically on push to main: detect change type via conventional commit message
+            COMMIT_MSG=$(cat <<'EOF'
+            ${{ github.event.head_commit.message }}
+            EOF
+            )
+            echo "Commit message: $COMMIT_MSG"
+            
+            RELEASE_TYPE="patch"
+            if echo "$COMMIT_MSG" | grep -Ei "BREAKING CHANGE|breaking[:(]" || echo "$COMMIT_MSG" | grep -Ei "^[a-z]+(\([a-z0-9_-]+\))?!:" ; then
+              RELEASE_TYPE="major"
+            elif echo "$COMMIT_MSG" | grep -Ei "^feat[:(]" ; then
+              RELEASE_TYPE="minor"
+            fi
+            
+            echo "Auto-detected release type: $RELEASE_TYPE"
+            if [ "$RELEASE_TYPE" = "major" ]; then
+              major=$((major + 1))
+              minor=0
+              patch=0
+            elif [ "$RELEASE_TYPE" = "minor" ]; then
+              minor=$((minor + 1))
+              patch=0
+            else
+              patch=$((patch + 1))
+            fi
             VERSION="v$major.$minor.$patch"
           fi
           
