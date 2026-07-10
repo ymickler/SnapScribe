@@ -22,6 +22,22 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
+  val debugKeystoreFile = file("${rootDir}/debug.keystore")
+  if (!debugKeystoreFile.exists()) {
+    println("Generating local debug.keystore since it was missing...")
+    ProcessBuilder(
+      "keytool", "-genkey", "-v",
+      "-keystore", debugKeystoreFile.absolutePath,
+      "-storepass", "android",
+      "-alias", "androiddebugkey",
+      "-keypass", "android",
+      "-keyalg", "RSA",
+      "-keysize", "2048",
+      "-validity", "10000",
+      "-dname", "CN=Android Debug, O=Android, C=US"
+    ).inheritIO().start().waitFor()
+  }
+
   signingConfigs {
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
@@ -31,7 +47,7 @@ android {
       keyPassword = System.getenv("KEY_PASSWORD")
     }
     create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
+      storeFile = debugKeystoreFile
       storePassword = "android"
       keyAlias = "androiddebugkey"
       keyPassword = "android"
