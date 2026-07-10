@@ -1,0 +1,6 @@
+{
+  "name": "SnapScribe",
+  "description": "An offline, local WhatsApp Audio Transcriber clone for transcribing voice messages in German and English.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

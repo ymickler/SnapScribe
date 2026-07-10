@@ -1,0 +1,128 @@
+package com.example.data
+
+import java.util.Locale
+
+/**
+ * Localization helper for SnapScribe providing instant UI translation
+ * for German and English without activity recreation issues.
+ */
+object Localization {
+    private val translations = mapOf(
+        "en" to mapOf(
+            "app_name" to "SnapScribe",
+            "tab_history" to "History",
+            "tab_settings" to "Settings",
+            "search_hint" to "Search past transcriptions...",
+            "empty_history" to "No transcriptions yet. Share an audio file from WhatsApp to get started!",
+            "btn_copy" to "Copy",
+            "btn_share" to "Share",
+            "btn_delete" to "Delete",
+            "toast_copied" to "Copied to clipboard!",
+            "toast_deleted" to "Transcription deleted",
+            "toast_language_changed" to "Language changed to ",
+            "overlay_permission_title" to "Overlay Permission Required",
+            "overlay_permission_msg" to "This app requires permission to display an overlay on top of other apps (like WhatsApp) when an audio file is shared.",
+            "overlay_permission_btn" to "Grant Permission",
+            "settings_header_transcription" to "Transcription Language",
+            "settings_desc_transcription" to "Set default language for automated voice message transcriptions.",
+            "settings_header_ui_lang" to "App UI Language",
+            "settings_desc_ui_lang" to "Set language used for the app's user interface.",
+            "settings_lang_system" to "System Default",
+            "settings_lang_de" to "German",
+            "settings_lang_en" to "English",
+            "settings_header_encryption" to "Encrypt History",
+            "settings_desc_encryption" to "Secures transcribed texts using AES-256 GCM via the Android Keystore.",
+            "settings_toast_enc_on" to "Encryption enabled",
+            "settings_toast_enc_off" to "Encryption disabled",
+            "settings_header_gemini" to "Google Gemini API Key (Optional)",
+            "settings_desc_gemini" to "Optionally enter your API key. It is stored securely on your device.",
+            "settings_gemini_warning_title" to "Cloud Processing Warning",
+            "settings_gemini_warning_text" to "If you enter an API key, voice files are processed via Google's cloud servers to provide premium transcription quality. This means the app is no longer strictly local-first, and audio data leaves your device.",
+            "settings_gemini_privacy_tip_title" to "Privacy & API Key Tip",
+            "settings_gemini_privacy_tip_text" to "For 100% offline privacy, simply leave this field empty. Speech recognition will run entirely locally on your device. You can generate a free personal key in the Google AI Studio console.",
+            "about_header" to "About SnapScribe",
+            "about_desc" to "SnapScribe is a completely free, open-source, and local tool for transcribing voice messages directly on your device.\n\nIt runs 100% offline without any internet connection or server communication. Your private data remains safe on your smartphone.",
+            "system_info_title" to "System Information",
+            "system_info_version" to "Version",
+            "system_info_license" to "License",
+            "system_info_license_type" to "Non-Commercial (CC BY-NC 4.0)",
+            "system_info_security" to "Security",
+            "system_info_offline" to "100% Offline (Secure)",
+            "system_info_cloud" to "Cloud-Assisted (Gemini)",
+            "settings_header_notification" to "Notification Mode",
+            "settings_desc_notification" to "Display transcription as a system notification instead of an overlay window.",
+            "notification_title_started" to "Transcription started...",
+            "notification_desc_started" to "Converting voice message offline...",
+            "notification_title_completed" to "Transcription finished",
+            "notification_action_copy" to "Copy",
+            "notification_action_share" to "Share",
+            "toast_service_started" to "Transcription started in background",
+            "sandbox_header" to "Preview Sandbox",
+            "sandbox_desc" to "Simulate incoming WhatsApp audio shares to test SnapScribe in the browser emulator.",
+            "sandbox_btn_simulate" to "Simulate Shared Audio"
+        ),
+        "de" to mapOf(
+            "app_name" to "SnapScribe",
+            "tab_history" to "Verlauf",
+            "tab_settings" to "Einstellungen",
+            "search_hint" to "Verlauf durchsuchen...",
+            "empty_history" to "Noch keine Transkriptionen vorhanden. Teile eine Audiodatei aus WhatsApp, um zu starten!",
+            "btn_copy" to "Kopieren",
+            "btn_share" to "Teilen",
+            "btn_delete" to "Löschen",
+            "toast_copied" to "In die Zwischenablage kopiert!",
+            "toast_deleted" to "Transkription gelöscht",
+            "toast_language_changed" to "Sprache geändert auf ",
+            "overlay_permission_title" to "Overlays zulassen erforderlich",
+            "overlay_permission_msg" to "Diese App benötigt die Erlaubnis, andere Apps zu überlagern (z.B. WhatsApp), um empfangene Audiodateien direkt anzuzeigen.",
+            "overlay_permission_btn" to "Berechtigung erteilen",
+            "settings_header_transcription" to "Transkriptionssprache",
+            "settings_desc_transcription" to "Wähle die Standardsprache für automatisierte Sprachnachrichten-Transkriptionen.",
+            "settings_header_ui_lang" to "App-Sprache (UI)",
+            "settings_desc_ui_lang" to "Wähle die Sprache für die Benutzeroberfläche der App.",
+            "settings_lang_system" to "Systemstandard",
+            "settings_lang_de" to "Deutsch",
+            "settings_lang_en" to "Englisch",
+            "settings_header_encryption" to "Verlauf verschlüsseln",
+            "settings_desc_encryption" to "Sichert transkribierte Texte mit AES-256 GCM über den Android Keystore.",
+            "settings_toast_enc_on" to "Verschlüsselung aktiviert",
+            "settings_toast_enc_off" to "Verschlüsselung deaktiviert",
+            "settings_header_gemini" to "Google Gemini API Key (Optional)",
+            "settings_desc_gemini" to "Gib optional deinen API-Schlüssel ein. Er wird sicher auf dem Gerät gespeichert.",
+            "settings_gemini_warning_title" to "Cloud-Verarbeitung Warnung",
+            "settings_gemini_warning_text" to "Wenn du einen API-Key einträgst, wird die Transkription über Google Cloud Server verarbeitet, um bessere Qualität zu erzielen. Dadurch ist die App nicht mehr rein 'Local-First' und Audiodaten verlassen dein Gerät.",
+            "settings_gemini_privacy_tip_title" to "Privatsphäre & API Key Tipp",
+            "settings_gemini_privacy_tip_text" to "Für 100% Offline-Privatsphäre lasse dieses Feld einfach leer. Die Erkennung läuft dann vollständig lokal ab. Deinen eigenen Key kannst du kostenlos in der Google AI Studio Konsole erstellen.",
+            "about_header" to "Über SnapScribe",
+            "about_desc" to "SnapScribe ist ein komplett freies, quelloffenes und lokales Tool zum Transkribieren von Sprachnachrichten direkt auf deinem Gerät.\n\nEs läuft zu 100% offline ohne jegliche Internetverbindung oder Server-Kommunikation. Deine privaten Daten bleiben sicher auf deinem Smartphone.",
+            "system_info_title" to "Systeminformationen",
+            "system_info_version" to "Version",
+            "system_info_license" to "Lizenz",
+            "system_info_license_type" to "Nicht-kommerzielle (CC BY-NC 4.0)",
+            "system_info_security" to "Sicherheit",
+            "system_info_offline" to "100% Offline (Sicher)",
+            "system_info_cloud" to "Cloud-Unterstützt (Gemini)",
+            "settings_header_notification" to "Benachrichtigungsmodus",
+            "settings_desc_notification" to "Zeigt die Transkription als Systembenachrichtigung anstelle eines Overlay-Fensters an.",
+            "notification_title_started" to "Transkription gestartet...",
+            "notification_desc_started" to "Konvertiere Sprachnachricht offline...",
+            "notification_title_completed" to "Transkription abgeschlossen",
+            "notification_action_copy" to "Kopieren",
+            "notification_action_share" to "Teilen",
+            "toast_service_started" to "Transkription im Hintergrund gestartet",
+            "sandbox_header" to "Vorschau Sandbox",
+            "sandbox_desc" to "Simuliere geteilte WhatsApp-Audiodateien, um SnapScribe im Browser-Emulator zu testen.",
+            "sandbox_btn_simulate" to "Geteilte Sprachnachricht simulieren"
+        )
+    )
+
+    fun getString(key: String, lang: String): String {
+        val targetLang = if (lang == "system") {
+            val sysLang = Locale.getDefault().language
+            if (sysLang.startsWith("de")) "de" else "en"
+        } else {
+            lang
+        }
+        return translations[targetLang]?.get(key) ?: translations["en"]?.get(key) ?: key
+    }
+}

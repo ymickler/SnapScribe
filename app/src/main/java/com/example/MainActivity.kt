@@ -1,0 +1,868 @@
+package com.example
+
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.data.TranscriptionEntity
+import com.example.data.TranscriptionRepository
+import com.example.data.Localization
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.SleekBackground
+import com.example.ui.theme.SleekHeader
+import com.example.ui.theme.SleekInnerSurface
+import com.example.ui.theme.SleekPrimary
+import com.example.ui.theme.SleekSurface
+import com.example.ui.theme.SleekText
+import com.example.ui.theme.SleekButtonText
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            MyApplicationTheme {
+                MainScreen()
+            }
+        }
+    }
+}
+
+class MainViewModel(private val repository: TranscriptionRepository) : ViewModel() {
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    // Combined stream filtering by search query only when executed
+    private val _executedQuery = MutableStateFlow("")
+
+    val transcriptions: StateFlow<List<TranscriptionEntity>> = _executedQuery
+        .flatMapLatest { query ->
+            if (query.isEmpty()) {
+                repository.allTranscriptions
+            } else {
+                repository.search(query)
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun executeSearch(query: String) {
+        _executedQuery.value = query
+    }
+
+    fun deleteTranscription(id: Int) {
+        viewModelScope.launch {
+            repository.deleteById(id)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen() {
+    val context = LocalContext.current
+    val repository = remember { DependencyProvider.getRepository(context) }
+    val viewModel: MainViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return MainViewModel(repository) as T
+            }
+        }
+    )
+
+    val transcriptions by viewModel.transcriptions.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+
+    var hasOverlayPermission by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Settings.canDrawOverlays(context)
+            } else {
+                true
+            }
+        )
+    }
+
+    // Dynamic, reactive permission check on ON_RESUME
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    hasOverlayPermission = Settings.canDrawOverlays(context)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val settingsManager = remember { DependencyProvider.getSettingsManager(context) }
+    var uiLanguage by remember { mutableStateOf(settingsManager.uiLanguage) }
+    var currentTab by remember { mutableIntStateOf(0) }
+
+    val appVersion = remember {
+        try {
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            "v${packageInfo.versionName}"
+        } catch (e: Exception) {
+            "v1.0.0"
+        }
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        bottomBar = {
+            NavigationBar(
+                containerColor = SleekSurface,
+                tonalElevation = 0.dp,
+                modifier = Modifier.height(80.dp)
+            ) {
+                NavigationBarItem(
+                    selected = currentTab == 0,
+                    onClick = { currentTab = 0 },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = Localization.getString("tab_history", uiLanguage)
+                        )
+                    },
+                    label = { Text(Localization.getString("tab_history", uiLanguage), fontSize = 10.sp) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = SleekButtonText,
+                        selectedTextColor = SleekText,
+                        indicatorColor = SleekPrimary,
+                        unselectedIconColor = SleekText.copy(alpha = 0.6f),
+                        unselectedTextColor = SleekText.copy(alpha = 0.6f)
+                    )
+                )
+                NavigationBarItem(
+                    selected = currentTab == 1,
+                    onClick = { currentTab = 1 },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = Localization.getString("tab_settings", uiLanguage)
+                        )
+                    },
+                    label = { Text(Localization.getString("tab_settings", uiLanguage), fontSize = 10.sp) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = SleekButtonText,
+                        selectedTextColor = SleekText,
+                        indicatorColor = SleekPrimary,
+                        unselectedIconColor = SleekText.copy(alpha = 0.6f),
+                        unselectedTextColor = SleekText.copy(alpha = 0.6f)
+                    )
+                )
+            }
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(SleekBackground)
+                .padding(innerPadding)
+        ) {
+            // Top App Bar/Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = Localization.getString("app_name", uiLanguage),
+                        color = SleekText,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SleekPrimary.copy(alpha = 0.15f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = appVersion,
+                            color = SleekPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            if (currentTab == 0) {
+                // History Tab View
+                var localSearchText by remember { mutableStateOf(searchQuery) }
+                OutlinedTextField(
+                    value = localSearchText,
+                    onValueChange = {
+                        localSearchText = it
+                        viewModel.updateSearchQuery(it)
+                    },
+                    placeholder = {
+                        Text(
+                            text = Localization.getString("search_hint", uiLanguage),
+                            color = SleekText.copy(alpha = 0.4f),
+                            fontSize = 14.sp
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search icon",
+                            tint = SleekText.copy(alpha = 0.5f)
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .testTag("search_bar_input"),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = SleekPrimary,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = SleekSurface,
+                        unfocusedContainerColor = SleekSurface,
+                        focusedTextColor = SleekText,
+                        unfocusedTextColor = SleekText
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = {
+                            viewModel.executeSearch(localSearchText)
+                        }
+                    ),
+                    singleLine = true
+                )
+
+                // Alert banner if system overlay permission is missing (Hides instantly when granted!)
+                if (!hasOverlayPermission) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = SleekInnerSurface),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = Localization.getString("overlay_permission_title", uiLanguage),
+                                color = SleekPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = Localization.getString("overlay_permission_msg", uiLanguage),
+                                color = SleekText.copy(alpha = 0.8f),
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                        val intent = Intent(
+                                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                            Uri.parse("package:${context.packageName}")
+                                        )
+                                        context.startActivity(intent)
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SleekPrimary,
+                                    contentColor = SleekButtonText
+                                )
+                            ) {
+                                Text(Localization.getString("overlay_permission_btn", uiLanguage))
+                            }
+                        }
+                    }
+                }
+
+                // History List
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("transcriptions_list"),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Item 1: Preview Sandbox (Debug/Preview Mode Only)
+                    if (com.example.BuildConfig.DEBUG) {
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .border(1.dp, SleekPrimary.copy(alpha = 0.2f), RoundedCornerShape(20.dp)),
+                                colors = CardDefaults.cardColors(containerColor = SleekSurface)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Mic,
+                                                contentDescription = "Sandbox Icon",
+                                                tint = SleekPrimary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Text(
+                                                text = Localization.getString("sandbox_header", uiLanguage),
+                                                color = SleekPrimary,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp
+                                            )
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(SleekPrimary.copy(alpha = 0.15f))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "SANDBOX",
+                                                color = SleekPrimary,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = Localization.getString("sandbox_desc", uiLanguage),
+                                        color = SleekText.copy(alpha = 0.7f),
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Button(
+                                        onClick = {
+                                            val mockUri = "mock://audio/whatsapp_voice_message_de"
+                                            val serviceIntent = Intent(context, com.example.service.TranscriptionOverlayService::class.java).apply {
+                                                putExtra(com.example.service.TranscriptionOverlayService.EXTRA_AUDIO_URI, mockUri)
+                                            }
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                                context.startForegroundService(serviceIntent)
+                                            } else {
+                                                context.startService(serviceIntent)
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = SleekPrimary,
+                                            contentColor = SleekButtonText
+                                        ),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text(
+                                            text = Localization.getString("sandbox_btn_simulate", uiLanguage),
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Item 2: Empty placeholder or history list items
+                    if (transcriptions.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 48.dp, horizontal = 32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = Localization.getString("empty_history", uiLanguage),
+                                    color = SleekText.copy(alpha = 0.5f),
+                                    fontSize = 14.sp,
+                                    textAlign = TextAlign.Center,
+                                    lineHeight = 20.sp
+                                )
+                            }
+                        }
+                    } else {
+                        items(transcriptions, key = { it.id }) { item ->
+                            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                HistoryItemCard(
+                                    item = item,
+                                    onCopy = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clip = ClipData.newPlainText("transcription", item.transcribedText)
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(context, Localization.getString("toast_copied", uiLanguage), Toast.LENGTH_SHORT).show()
+                                    },
+                                    onShare = {
+                                        val shareIntent = Intent().apply {
+                                            action = Intent.ACTION_SEND
+                                            putExtra(Intent.EXTRA_TEXT, item.transcribedText)
+                                            type = "text/plain"
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, null))
+                                    },
+                                    onDelete = {
+                                        viewModel.deleteTranscription(item.id)
+                                        Toast.makeText(context, Localization.getString("toast_deleted", uiLanguage), Toast.LENGTH_SHORT).show()
+                                    },
+                                    uiLanguage = uiLanguage
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Settings Tab View (currentTab == 1)
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // App UI Language Selection Card
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(24.dp)),
+                        colors = CardDefaults.cardColors(containerColor = SleekSurface)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Text(
+                                text = Localization.getString("settings_header_ui_lang", uiLanguage),
+                                color = SleekPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = Localization.getString("settings_desc_ui_lang", uiLanguage),
+                                color = SleekText.copy(alpha = 0.6f),
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            val uiLangOptions = listOf(
+                                "system" to Localization.getString("settings_lang_system", uiLanguage),
+                                "de" to "Deutsch",
+                                "en" to "English"
+                            )
+
+                            // Sleek, compact horizontally segmented button control
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                uiLangOptions.forEach { (code, label) ->
+                                    val isSelected = uiLanguage == code
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(if (isSelected) SleekPrimary else SleekInnerSurface)
+                                            .clickable {
+                                                uiLanguage = code
+                                                settingsManager.uiLanguage = code
+                                                val feedbackMsg = Localization.getString("toast_language_changed", code) + label
+                                                Toast.makeText(context, feedbackMsg, Toast.LENGTH_SHORT).show()
+                                            }
+                                            .padding(vertical = 10.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = label,
+                                            color = if (isSelected) SleekButtonText else SleekText,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Smart Language Selection Card (Transcription Language) - Space-efficient & polished!
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(24.dp)),
+                        colors = CardDefaults.cardColors(containerColor = SleekSurface)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Text(
+                                text = Localization.getString("settings_header_transcription", uiLanguage),
+                                color = SleekPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = Localization.getString("settings_desc_transcription", uiLanguage),
+                                color = SleekText.copy(alpha = 0.6f),
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            var selectedLanguage by remember { mutableStateOf(settingsManager.language) }
+                            val transLangOptions = listOf(
+                                "system" to Localization.getString("settings_lang_system", uiLanguage),
+                                "de" to "DE",
+                                "en" to "EN"
+                            )
+
+                            // Custom Radio-styled segmented selector buttons
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                transLangOptions.forEach { (code, label) ->
+                                    val isSelected = selectedLanguage == code
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(if (isSelected) SleekPrimary else SleekInnerSurface)
+                                            .clickable {
+                                                selectedLanguage = code
+                                                settingsManager.language = code
+                                                val feedbackMsg = Localization.getString("toast_language_changed", uiLanguage) + label
+                                                Toast.makeText(context, feedbackMsg, Toast.LENGTH_SHORT).show()
+                                            }
+                                            .padding(vertical = 10.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = label,
+                                            color = if (isSelected) SleekButtonText else SleekText,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Notification Mode Toggle Card
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(24.dp)),
+                        colors = CardDefaults.cardColors(containerColor = SleekSurface)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = Localization.getString("settings_header_notification", uiLanguage),
+                                        color = SleekPrimary,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = Localization.getString("settings_desc_notification", uiLanguage),
+                                        color = SleekText.copy(alpha = 0.6f),
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                var showAsNotification by remember { mutableStateOf(settingsManager.showAsNotification) }
+                                Switch(
+                                    checked = showAsNotification,
+                                    onCheckedChange = {
+                                        showAsNotification = it
+                                        settingsManager.showAsNotification = it
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = SleekButtonText,
+                                        checkedTrackColor = SleekPrimary,
+                                        uncheckedThumbColor = SleekText.copy(alpha = 0.4f),
+                                        uncheckedTrackColor = SleekInnerSurface
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    // About App / Privacy info Card
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(24.dp)),
+                        colors = CardDefaults.cardColors(containerColor = SleekSurface)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Text(
+                                text = Localization.getString("about_header", uiLanguage),
+                                color = SleekPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = Localization.getString("about_desc", uiLanguage),
+                                color = SleekText.copy(alpha = 0.8f),
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+
+                    // App Version Information Card
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(24.dp)),
+                        colors = CardDefaults.cardColors(containerColor = SleekSurface)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = Localization.getString("system_info_title", uiLanguage),
+                                color = SleekPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(Localization.getString("system_info_version", uiLanguage), color = SleekText.copy(alpha = 0.6f), fontSize = 12.sp)
+                                Text(appVersion, color = SleekText, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(Localization.getString("system_info_license", uiLanguage), color = SleekText.copy(alpha = 0.6f), fontSize = 12.sp)
+                                Text(Localization.getString("system_info_license_type", uiLanguage), color = SleekText, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(Localization.getString("system_info_security", uiLanguage), color = SleekText.copy(alpha = 0.6f), fontSize = 12.sp)
+                                Text(Localization.getString("system_info_offline", uiLanguage), color = SleekPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HistoryItemCard(
+    item: TranscriptionEntity,
+    onCopy: () -> Unit,
+    onShare: () -> Unit,
+    onDelete: () -> Unit,
+    uiLanguage: String
+) {
+    val formattedDate = remember(item.timestamp) {
+        val sdf = SimpleDateFormat("dd. MMM, HH:mm", Locale.getDefault())
+        sdf.format(Date(item.timestamp))
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(24.dp))
+            .testTag("transcription_item_card"),
+        colors = CardDefaults.cardColors(containerColor = SleekSurface)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formattedDate,
+                    color = SleekPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                if (item.language.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .background(SleekHeader, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = item.language.uppercase(Locale.ROOT),
+                            color = SleekText,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = item.transcribedText,
+                color = SleekText.copy(alpha = 0.9f),
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onCopy,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SleekPrimary),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(width = 0.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "Copy",
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(Localization.getString("btn_copy", uiLanguage), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                OutlinedButton(
+                    onClick = onShare,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SleekText),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(width = 0.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Share",
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(Localization.getString("btn_share", uiLanguage), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SleekHeader)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
