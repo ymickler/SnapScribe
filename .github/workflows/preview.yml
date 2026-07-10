@@ -1,0 +1,82 @@
+name: SnapScribe PR Preview Build
+
+on:
+  pull_request:
+    types: [opened, synchronize, labeled]
+    paths:
+      - 'app/**'
+      - '!app/**/*.md'
+      - 'gradle/**'
+      - '!gradle/**/*.md'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - '.github/workflows/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
+jobs:
+  build-preview:
+    # Only run if the PR has the 'build-preview' label
+    if: contains(github.event.pull_request.labels.*.name, 'build-preview')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.1'
+
+      - name: Extract App Name
+        id: app_info
+        run: |
+          APP_NAME=$(grep "rootProject.name" settings.gradle.kts | cut -d '"' -f 2)
+          echo "APP_NAME=$APP_NAME" >> $GITHUB_ENV
+          echo "app_name=$APP_NAME" >> $GITHUB_OUTPUT
+
+      - name: Generate PR Version Tag
+        id: versioning
+        run: |
+          # Fetch all tags to determine the latest release tag
+          git fetch --tags --force || true
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+          VERSION_CLEAN=${LATEST_TAG#v}
+          
+          # Build temporary PR version
+          PR_NUM="${{ github.event.pull_request.number }}"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          VERSION="${VERSION_CLEAN}-pr${PR_NUM}-${SHORT_SHA}"
+          
+          echo "Generated PR Version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug -PversionName="${{ env.VERSION }}" --stacktrace
+
+      - name: Prepare Preview Asset
+        run: |
+          mkdir -p preview-artifacts
+          cp app/build/outputs/apk/debug/${{ env.APP_NAME }}-debug.apk preview-artifacts/${{ env.APP_NAME }}-${{ env.VERSION }}.apk
+
+      - name: Upload PR Preview APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-PR${{ github.event.pull_request.number }}-${{ env.VERSION }}
+          path: preview-artifacts/${{ env.APP_NAME }}-${{ env.VERSION }}.apk

@@ -98,6 +98,7 @@ SnapScribe utilizes an on-the-fly custom translation helper to prevent screen re
   * **Kotlin:** `2.3.0` (integrated Compose Compiler plugin)
   * **Android Gradle Plugin (AGP):** `9.2.0`
   * **Kotlin Symbol Processing (KSP):** `2.3.9`
+  * **JDK Version:** `21` (used in CI workflow / local execution)
 * **Self-Healing debug.keystore:**
   * Since `debug.keystore` is gitignored, the app defines a custom Gradle task `generateDebugKeystore` of type `Exec` inside `app/build.gradle.kts`.
   * If the keystore file is missing locally or on the CI runner, Gradle automatically runs `keytool` to generate a valid debug keystore in the root directory before running the build. This avoids missing keystore compilation errors.
@@ -112,3 +113,8 @@ SnapScribe utilizes an on-the-fly custom translation helper to prevent screen re
     * **Major Bump (`vA.0.0`):** Triggered if the commit message contains `BREAKING CHANGE`, `breaking:`, or an exclamation mark suffix (e.g. `feat!:`).
     * **Minor Bump (`vX.B.0`):** Triggered if the commit message starts with `feat:` or `feat(`.
     * **Patch Bump (`vX.Y.C`):** Default fallback for fixes (`fix:`), refactoring (`refactor:`), chores (`chore:`), etc.
+* **GitHub Actions Preview CI (`preview.yml`):**
+  * Triggered automatically on pull requests (`opened`, `synchronize`, `labeled`).
+  * **Label Filter:** Executes only if the pull request is labeled with **`build-preview`** (created via GitHub CLI or UI).
+  * **Dynamic PR Versioning:** Injects a temporary version name (`[BaseVersion]-pr[PR_Number]-[Short_SHA]`) into Gradle via `-PversionName` so that the generated app binary contains metadata referencing the exact Pull Request and commit source.
+  * **Artifact Upload:** Renames and uploads the preview APK as a workflow artifact, accessible directly from the Actions run summary page.
