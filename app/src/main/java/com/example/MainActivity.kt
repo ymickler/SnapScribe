@@ -161,6 +161,15 @@ fun MainScreen() {
     }
 
     val settingsManager = remember { DependencyProvider.getSettingsManager(context) }
+    val modelDownloader = remember { com.example.engine.ModelDownloader(context) }
+    var modelUpdateTrigger by remember { mutableIntStateOf(0) }
+    var showOnboarding by remember {
+        mutableStateOf(
+            !modelDownloader.isModelDownloaded(com.example.engine.ModelDownloader.ModelType.VOSK_DE) &&
+            !modelDownloader.isModelDownloaded(com.example.engine.ModelDownloader.ModelType.VOSK_EN) &&
+            !modelDownloader.isModelDownloaded(com.example.engine.ModelDownloader.ModelType.WHISPER_TINY)
+        )
+    }
     var uiLanguage by remember { mutableStateOf(settingsManager.uiLanguage) }
     var currentTab by remember { mutableIntStateOf(0) }
 
@@ -342,6 +351,68 @@ fun MainScreen() {
                                 )
                             ) {
                                 Text(Localization.getString("overlay_permission_btn", uiLanguage))
+                            }
+                        }
+                    }
+                }
+
+                val activeRequiredModel = when {
+                    settingsManager.sttEngine == "whisper" -> {
+                        when (settingsManager.whisperModelSize) {
+                            "base" -> com.example.engine.ModelDownloader.ModelType.WHISPER_BASE
+                            "small" -> com.example.engine.ModelDownloader.ModelType.WHISPER_SMALL
+                            else -> com.example.engine.ModelDownloader.ModelType.WHISPER_TINY
+                        }
+                    }
+                    settingsManager.getTargetLanguageCode() == "de" -> com.example.engine.ModelDownloader.ModelType.VOSK_DE
+                    else -> com.example.engine.ModelDownloader.ModelType.VOSK_EN
+                }
+                
+                var isActiveModelDownloaded by remember(settingsManager.sttEngine, settingsManager.language, settingsManager.whisperModelSize, modelUpdateTrigger) {
+                    mutableStateOf(modelDownloader.isModelDownloaded(activeRequiredModel))
+                }
+                
+                if (!isActiveModelDownloaded) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = SleekInnerSurface),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = "Warning",
+                                    tint = SleekPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Offline Model Required",
+                                    color = SleekPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "SnapScribe requires a model to transcribe voice messages offline. Currently selected: ${activeRequiredModel.folderName} (${activeRequiredModel.sizeLabel}).",
+                                color = SleekText.copy(alpha = 0.8f),
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = {
+                                    currentTab = 1
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SleekPrimary,
+                                    contentColor = SleekButtonText
+                                )
+                            ) {
+                                Text("Go to Settings to Download")
                             }
                         }
                     }
@@ -693,6 +764,54 @@ fun MainScreen() {
                                 }
                             }
                             
+                            if (selectedEngine == "whisper") {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "Whisper Model Size:",
+                                    color = SleekText,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                var selectedWhisperSize by remember { mutableStateOf(settingsManager.whisperModelSize) }
+                                val whisperSizeOptions = listOf(
+                                    "tiny" to "Tiny (~75 MB)",
+                                    "base" to "Base (~140 MB)",
+                                    "small" to "Small (~460 MB)"
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    whisperSizeOptions.forEach { (sizeCode, sizeLabel) ->
+                                        val isSizeSelected = selectedWhisperSize == sizeCode
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(if (isSizeSelected) SleekPrimary else SleekInnerSurface)
+                                                .clickable {
+                                                    selectedWhisperSize = sizeCode
+                                                    settingsManager.whisperModelSize = sizeCode
+                                                    modelUpdateTrigger++
+                                                }
+                                                .padding(vertical = 10.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = sizeLabel.split(" ")[0] + "\n" + sizeLabel.substringAfter(" "),
+                                                color = if (isSizeSelected) SleekButtonText else SleekText,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            
                             Spacer(modifier = Modifier.height(16.dp))
                             
                             // Model Download Status
@@ -700,12 +819,18 @@ fun MainScreen() {
                             val coroutineScope = rememberCoroutineScope()
                             
                             val requiredModel = when {
-                                selectedEngine == "whisper" -> com.example.engine.ModelDownloader.ModelType.WHISPER_TINY
+                                selectedEngine == "whisper" -> {
+                                    when (settingsManager.whisperModelSize) {
+                                        "base" -> com.example.engine.ModelDownloader.ModelType.WHISPER_BASE
+                                        "small" -> com.example.engine.ModelDownloader.ModelType.WHISPER_SMALL
+                                        else -> com.example.engine.ModelDownloader.ModelType.WHISPER_TINY
+                                    }
+                                }
                                 settingsManager.getTargetLanguageCode() == "de" -> com.example.engine.ModelDownloader.ModelType.VOSK_DE
                                 else -> com.example.engine.ModelDownloader.ModelType.VOSK_EN
                             }
                             
-                            var isDownloaded by remember(requiredModel) { mutableStateOf(modelDownloader.isModelDownloaded(requiredModel)) }
+                            var isDownloaded by remember(requiredModel, modelUpdateTrigger) { mutableStateOf(modelDownloader.isModelDownloaded(requiredModel)) }
                             var downloadProgress by remember { mutableStateOf(-1f) }
                             
                             Row(
@@ -715,7 +840,7 @@ fun MainScreen() {
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Required Model: ${requiredModel.folderName}",
+                                        text = "Required Model: ${requiredModel.folderName} (${requiredModel.sizeLabel})",
                                         color = SleekText,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Medium
@@ -735,6 +860,7 @@ fun MainScreen() {
                                         onClick = { 
                                             modelDownloader.deleteModel(requiredModel)
                                             isDownloaded = false
+                                            modelUpdateTrigger++
                                         },
                                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF44336)),
                                         border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp, brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFF44336).copy(alpha = 0.5f))),
@@ -753,6 +879,7 @@ fun MainScreen() {
                                                             downloadProgress = progress
                                                         }
                                                         isDownloaded = true
+                                                        modelUpdateTrigger++
                                                     } catch (e: Exception) {
                                                         Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
                                                     } finally {
@@ -890,6 +1017,161 @@ fun MainScreen() {
                 }
             }
         }
+    }
+
+    if (showOnboarding) {
+        var downloadProgress by remember { mutableStateOf(-1f) }
+        val scope = rememberCoroutineScope()
+        
+        AlertDialog(
+            onDismissRequest = { /* Prevent dismiss on outside click */ },
+            title = {
+                Text(
+                    text = "Setup Offline Transcription",
+                    color = SleekPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "To transcribe voice messages offline without any cloud keys, SnapScribe needs to download a small language model. Please choose your preferences below.",
+                        color = SleekText,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                    
+                    var wizardEngine by remember { mutableStateOf(settingsManager.sttEngine) }
+                    var wizardLang by remember { mutableStateOf(settingsManager.language) }
+                    var wizardWhisperSize by remember { mutableStateOf(settingsManager.whisperModelSize) }
+                    
+                    Text("1. Select Transcription Engine:", fontWeight = FontWeight.Bold, color = SleekText, fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("vosk" to "Vosk (Fast)", "whisper" to "Whisper (Accurate)").forEach { (code, label) ->
+                            val isSelected = wizardEngine == code
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) SleekPrimary else SleekInnerSurface)
+                                    .clickable {
+                                        wizardEngine = code
+                                        settingsManager.sttEngine = code
+                                    }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(label, color = if (isSelected) SleekButtonText else SleekText, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                            }
+                        }
+                    }
+                    
+                    if (wizardEngine == "vosk") {
+                        Text("2. Select Language:", fontWeight = FontWeight.Bold, color = SleekText, fontSize = 12.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("de" to "Deutsch", "en" to "English").forEach { (code, label) ->
+                                val isSelected = wizardLang == code
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) SleekPrimary else SleekInnerSurface)
+                                        .clickable {
+                                            wizardLang = code
+                                            settingsManager.language = code
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(label, color = if (isSelected) SleekButtonText else SleekText, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                }
+                            }
+                        }
+                    } else {
+                        Text("2. Select Whisper Model Size:", fontWeight = FontWeight.Bold, color = SleekText, fontSize = 12.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("tiny" to "Tiny (~75MB)", "base" to "Base (~140MB)", "small" to "Small (~460MB)").forEach { (code, label) ->
+                                val isSelected = wizardWhisperSize == code
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) SleekPrimary else SleekInnerSurface)
+                                        .clickable {
+                                            wizardWhisperSize = code
+                                            settingsManager.whisperModelSize = code
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(label.split(" ")[0] + "\n" + label.substringAfter(" "), color = if (isSelected) SleekButtonText else SleekText, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                }
+                            }
+                        }
+                    }
+                    
+                    val selectedModel = when {
+                        wizardEngine == "whisper" -> {
+                            when (wizardWhisperSize) {
+                                "base" -> com.example.engine.ModelDownloader.ModelType.WHISPER_BASE
+                                "small" -> com.example.engine.ModelDownloader.ModelType.WHISPER_SMALL
+                                else -> com.example.engine.ModelDownloader.ModelType.WHISPER_TINY
+                            }
+                        }
+                        wizardLang == "de" || (wizardLang == "system" && Locale.getDefault().language.startsWith("de")) -> com.example.engine.ModelDownloader.ModelType.VOSK_DE
+                        else -> com.example.engine.ModelDownloader.ModelType.VOSK_EN
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    if (downloadProgress >= 0f) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                            LinearProgressIndicator(
+                                progress = { downloadProgress },
+                                color = SleekPrimary,
+                                trackColor = SleekInnerSurface,
+                                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Downloading: ${(downloadProgress * 100).toInt()}%", fontSize = 12.sp, color = SleekPrimary)
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                downloadProgress = 0f
+                                scope.launch {
+                                    try {
+                                        modelDownloader.downloadModel(selectedModel) { progress ->
+                                            downloadProgress = progress
+                                        }
+                                        modelUpdateTrigger++
+                                        showOnboarding = false
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                    } finally {
+                                        downloadProgress = -1f
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = SleekPrimary, contentColor = SleekButtonText)
+                        ) {
+                            Text("Download (${selectedModel.sizeLabel}) & Start")
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                if (downloadProgress < 0f) {
+                    TextButton(onClick = { showOnboarding = false }) {
+                        Text("Skip Setup", color = SleekText.copy(alpha = 0.6f))
+                    }
+                }
+            },
+            containerColor = SleekSurface
+        )
     }
 }
 

@@ -68,14 +68,6 @@ jobs:
           echo "APP_NAME=$APP_NAME" >> $GITHUB_ENV
           echo "app_name=$APP_NAME" >> $GITHUB_OUTPUT
 
-      - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
-
-      - name: Prepare Release Asset
-        run: |
-          mkdir -p release-artifacts
-          cp app/build/outputs/apk/debug/${{ env.APP_NAME }}-debug.apk release-artifacts/${{ env.APP_NAME }}.apk
-
       - name: Generate Version Tag
         id: versioning
         env:
@@ -147,6 +139,17 @@ jobs:
           echo "Generated version: $VERSION"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "tag_name=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build Debug APK
+        run: |
+          VERSION_NUM="${{ env.VERSION }}"
+          VERSION_NUM="${VERSION_NUM#v}"
+          ./gradlew :app:assembleDebug -PversionName="$VERSION_NUM" --stacktrace
+
+      - name: Prepare Release Asset
+        run: |
+          mkdir -p release-artifacts
+          cp app/build/outputs/apk/debug/${{ env.APP_NAME }}-debug.apk release-artifacts/${{ env.APP_NAME }}.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

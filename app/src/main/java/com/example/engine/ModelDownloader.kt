@@ -12,10 +12,12 @@ import java.util.zip.ZipInputStream
 
 class ModelDownloader(private val context: Context) {
 
-    enum class ModelType(val engine: String, val language: String, val url: String, val isZip: Boolean, val folderName: String) {
-        VOSK_DE("vosk", "de", "https://alphacephei.com/vosk/models/vosk-model-small-de-0.15.zip", true, "vosk-model-small-de-0.15"),
-        VOSK_EN("vosk", "en", "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip", true, "vosk-model-small-en-us-0.15"),
-        WHISPER_TINY("whisper", "any", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin", false, "ggml-tiny.bin")
+    enum class ModelType(val engine: String, val language: String, val url: String, val isZip: Boolean, val folderName: String, val sizeLabel: String) {
+        VOSK_DE("vosk", "de", "https://alphacephei.com/vosk/models/vosk-model-small-de-0.15.zip", true, "vosk-model-small-de-0.15", "~40 MB"),
+        VOSK_EN("vosk", "en", "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip", true, "vosk-model-small-en-us-0.15", "~40 MB"),
+        WHISPER_TINY("whisper", "tiny", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin", false, "ggml-tiny.bin", "~75 MB"),
+        WHISPER_BASE("whisper", "base", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin", false, "ggml-base.bin", "~140 MB"),
+        WHISPER_SMALL("whisper", "small", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin", false, "ggml-small.bin", "~460 MB")
     }
 
     private val client = OkHttpClient()

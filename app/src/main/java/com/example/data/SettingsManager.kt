@@ -14,6 +14,7 @@ class SettingsManager(context: Context) {
         private const val KEY_GEMINI_API_KEY = "gemini_api_key"
         private const val KEY_SHOW_AS_NOTIFICATION = "show_as_notification"
         private const val KEY_STT_ENGINE = "stt_engine"
+        private const val KEY_WHISPER_MODEL_SIZE = "whisper_model_size"
     }
 
     var language: String
@@ -39,6 +40,10 @@ class SettingsManager(context: Context) {
     var sttEngine: String
         get() = prefs.getString(KEY_STT_ENGINE, "vosk") ?: "vosk"
         set(value) = prefs.edit().putString(KEY_STT_ENGINE, value).apply()
+
+    var whisperModelSize: String
+        get() = prefs.getString(KEY_WHISPER_MODEL_SIZE, "tiny") ?: "tiny"
+        set(value) = prefs.edit().putString(KEY_WHISPER_MODEL_SIZE, value).apply()
 
     fun getTargetLanguageCode(): String {
         val selected = language

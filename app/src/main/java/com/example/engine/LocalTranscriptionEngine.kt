@@ -41,7 +41,13 @@ class LocalTranscriptionEngine(
                 val langCode = settingsManager.getTargetLanguageCode()
 
                 val modelType = when {
-                    engineType == "whisper" -> ModelDownloader.ModelType.WHISPER_TINY
+                    engineType == "whisper" -> {
+                        when (settingsManager.whisperModelSize) {
+                            "base" -> ModelDownloader.ModelType.WHISPER_BASE
+                            "small" -> ModelDownloader.ModelType.WHISPER_SMALL
+                            else -> ModelDownloader.ModelType.WHISPER_TINY
+                        }
+                    }
                     langCode == "de" -> ModelDownloader.ModelType.VOSK_DE
                     else -> ModelDownloader.ModelType.VOSK_EN
                 }
