@@ -103,6 +103,7 @@ class TranscriptionOverlayService : Service() {
     private var savedEntityId: Int? = null
     private var savedTimestamp: Long? = null
     private var cachedLocalAudioFile: File? = null
+    private var currentSessionId = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -169,6 +170,7 @@ class TranscriptionOverlayService : Service() {
 
     private fun startTranscription(uriString: String, modelOverride: ModelDownloader.ModelType? = null) {
         activeJob?.cancel()
+        val sessionId = ++currentSessionId
         val context = this
         val uri = Uri.parse(uriString)
         val engine = LocalTranscriptionEngine(context)
@@ -189,16 +191,19 @@ class TranscriptionOverlayService : Service() {
 
         activeJob = engine.transcribeAudio(uri, object : LocalTranscriptionEngine.TranscriptionCallback {
             override fun onStart() {
+                if (sessionId != currentSessionId) return
                 transcriptionStatus = "Loading Offline Engine..."
                 transcriptionProgress = 0.05f
                 updateForegroundNotification(transcriptionStatus, transcriptionProgress)
             }
 
             override fun onModelResolved(modelType: ModelDownloader.ModelType) {
+                if (sessionId != currentSessionId) return
                 currentModelType = modelType
             }
 
             override fun onProgress(progress: Float) {
+                if (sessionId != currentSessionId) return
                 val isWhisper = (currentModelType?.engine ?: settings.sttEngine) == "whisper"
                 transcriptionStatus = when {
                     isWhisper -> {
@@ -217,11 +222,13 @@ class TranscriptionOverlayService : Service() {
             }
  
             override fun onPartialResult(text: String) {
+                if (sessionId != currentSessionId) return
                 transcribedText = text
                 updateForegroundNotification(transcriptionStatus, transcriptionProgress, text)
             }
  
             override fun onComplete(fullText: String) {
+                if (sessionId != currentSessionId) return
                 transcribedText = fullText
                 transcriptionProgress = 1.0f
                 transcriptionStatus = "Completed"
@@ -243,7 +250,7 @@ class TranscriptionOverlayService : Service() {
                         val id = repository.insert(entity)
                         savedEntityId = id.toInt()
                         savedTimestamp = entity.timestamp
-
+ 
                         if (settings.showAsNotification) {
                             showCompletedNotification(context, id.toInt(), fullText)
                             stopSelf()
@@ -255,6 +262,7 @@ class TranscriptionOverlayService : Service() {
             }
  
             override fun onError(error: String) {
+                if (sessionId != currentSessionId) return
                 isError = true
                 errorMsg = error
                 transcriptionStatus = "Error occurred"

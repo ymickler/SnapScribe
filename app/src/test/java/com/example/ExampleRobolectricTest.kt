@@ -140,7 +140,7 @@ class ExampleRobolectricTest {
             override fun onError(error: String) {
                 // handle error
             }
-        }, simulateDelays = false)
+        })
 
         // Advance time to execute all coroutine delays immediately in virtual time
         testScheduler.advanceUntilIdle()
@@ -148,5 +148,36 @@ class ExampleRobolectricTest {
         assertTrue("Should have started transcription", startedCalled)
         assertTrue("Should have reported progress", progressReported)
         assertTrue("Should have transcribed text", completedText.isNotEmpty())
+    }
+
+    @Test
+    fun testLocalTranscriptionEngineCancellation() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val testDispatcher = kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)
+        val engine = LocalTranscriptionEngine(context, testDispatcher)
+        val fakeUri = Uri.parse("content://media/external/audio/media/1")
+
+        var errorCalled = false
+        var completedCalled = false
+
+        val job = engine.transcribeAudio(fakeUri, object : LocalTranscriptionEngine.TranscriptionCallback {
+            override fun onStart() {}
+            override fun onProgress(progress: Float) {}
+            override fun onPartialResult(text: String) {}
+            override fun onComplete(fullText: String) {
+                completedCalled = true
+            }
+            override fun onError(error: String) {
+                errorCalled = true
+            }
+        })
+
+        // Cancel the job immediately before it finishes
+        job.cancel()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue("Job should be cancelled", job.isCancelled)
+        assertFalse("onError should not be called upon cancellation", errorCalled)
+        assertFalse("onComplete should not be called upon cancellation", completedCalled)
     }
 }

@@ -52,6 +52,9 @@ class WhisperEngineImpl : STTEngine {
             fullText = result.text ?: ""
             
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) {
+                throw e
+            }
             e.printStackTrace()
             throw Exception("Whisper transcription failed: ${e.message}")
         } finally {

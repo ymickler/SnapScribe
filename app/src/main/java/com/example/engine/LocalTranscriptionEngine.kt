@@ -94,6 +94,9 @@ class LocalTranscriptionEngine(
                 callback.onComplete(fullText)
 
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) {
+                    throw e
+                }
                 Log.e(tag, "Error transcribing audio file", e)
                 callback.onError(e.message ?: "Unknown offline transcription error")
             } finally {

@@ -1290,14 +1290,43 @@ fun HistoryItemCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            Text(
-                text = item.transcribedText,
-                color = SleekText.copy(alpha = 0.9f),
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis
-            )
+            var isExpanded by remember { mutableStateOf(false) }
+            var canExpand by remember { mutableStateOf(false) }
+
+            Column {
+                Text(
+                    text = item.transcribedText,
+                    color = SleekText.copy(alpha = 0.9f),
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    maxLines = if (isExpanded) Int.MAX_VALUE else 4,
+                    overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { textLayoutResult ->
+                        if (!isExpanded) {
+                            canExpand = textLayoutResult.hasVisualOverflow
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (canExpand || isExpanded) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = if (isExpanded) {
+                            Localization.getString("btn_show_less", uiLanguage)
+                        } else {
+                            Localization.getString("btn_show_more", uiLanguage)
+                        },
+                        color = SleekPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clickable { isExpanded = !isExpanded }
+                            .padding(vertical = 4.dp)
+                            .testTag("read_more_btn")
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
