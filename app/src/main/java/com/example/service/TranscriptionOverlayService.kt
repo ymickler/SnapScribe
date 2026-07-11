@@ -94,6 +94,8 @@ class TranscriptionOverlayService : Service() {
     private var isError by mutableStateOf(false)
     private var errorMsg by mutableStateOf("")
     private var showCancelConfirmation by mutableStateOf(false)
+    private var activeJob: kotlinx.coroutines.Job? = null
+    private var activeModelType by mutableStateOf<com.example.engine.ModelDownloader.ModelType?>(null)
     private var currentAudioUriString: String = ""
     private var currentModelType by mutableStateOf<ModelDownloader.ModelType?>(null)
     private var installedModels by mutableStateOf<List<ModelDownloader.ModelType>>(emptyList())
@@ -166,6 +168,7 @@ class TranscriptionOverlayService : Service() {
     }
 
     private fun startTranscription(uriString: String, modelOverride: ModelDownloader.ModelType? = null) {
+        activeJob?.cancel()
         val context = this
         val uri = Uri.parse(uriString)
         val engine = LocalTranscriptionEngine(context)
@@ -184,7 +187,7 @@ class TranscriptionOverlayService : Service() {
             transcriptionProgress = 0f
         }
 
-        engine.transcribeAudio(uri, object : LocalTranscriptionEngine.TranscriptionCallback {
+        activeJob = engine.transcribeAudio(uri, object : LocalTranscriptionEngine.TranscriptionCallback {
             override fun onStart() {
                 transcriptionStatus = "Loading Offline Engine..."
                 transcriptionProgress = 0.05f
@@ -490,56 +493,57 @@ class TranscriptionOverlayService : Service() {
                         }
                     }
 
+                    if (installedModels.size > 1) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Box {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(SleekBackground)
+                                    .clickable { showModelMenu = true }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = com.example.data.Localization.getString("overlay_model_label", settings.uiLanguage) +
+                                        " " + (currentModelType?.let { "${it.displayLabel} (${it.sizeLabel})" } ?: ""),
+                                    color = SleekText,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    tint = SleekText,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showModelMenu,
+                                onDismissRequest = { showModelMenu = false }
+                            ) {
+                                installedModels.forEach { model ->
+                                    DropdownMenuItem(
+                                        text = { Text("${model.displayLabel} (${model.sizeLabel})") },
+                                        leadingIcon = if (model == currentModelType) {
+                                            { Icon(imageVector = Icons.Default.Check, contentDescription = null) }
+                                        } else null,
+                                        onClick = {
+                                            showModelMenu = false
+                                            if (model != currentModelType) {
+                                                startTranscription(currentAudioUriString, model)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Action panel once completed
                     AnimatedVisibility(visible = isCompleted) {
                         Column {
-                            if (installedModels.size > 1) {
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Box {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(SleekBackground)
-                                            .clickable { showModelMenu = true }
-                                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                                    ) {
-                                        Text(
-                                            text = com.example.data.Localization.getString("overlay_model_label", settings.uiLanguage) +
-                                                " " + (currentModelType?.let { "${it.displayLabel} (${it.sizeLabel})" } ?: ""),
-                                            color = SleekText,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Icon(
-                                            imageVector = Icons.Default.KeyboardArrowDown,
-                                            contentDescription = null,
-                                            tint = SleekText,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                    DropdownMenu(
-                                        expanded = showModelMenu,
-                                        onDismissRequest = { showModelMenu = false }
-                                    ) {
-                                        installedModels.forEach { model ->
-                                            DropdownMenuItem(
-                                                text = { Text("${model.displayLabel} (${model.sizeLabel})") },
-                                                leadingIcon = if (model == currentModelType) {
-                                                    { Icon(imageVector = Icons.Default.Check, contentDescription = null) }
-                                                } else null,
-                                                onClick = {
-                                                    showModelMenu = false
-                                                    if (model != currentModelType) {
-                                                        startTranscription(currentAudioUriString, model)
-                                                    }
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
                             Spacer(modifier = Modifier.height(16.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),

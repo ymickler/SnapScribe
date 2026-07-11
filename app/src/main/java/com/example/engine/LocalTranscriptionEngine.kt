@@ -33,8 +33,8 @@ class LocalTranscriptionEngine(
         audioUri: Uri,
         callback: TranscriptionCallback,
         modelOverride: ModelDownloader.ModelType? = null
-    ) {
-        CoroutineScope(dispatcher).launch {
+    ): kotlinx.coroutines.Job {
+        return CoroutineScope(dispatcher).launch {
             var convertedWavFile: File? = null
             try {
                 callback.onStart()

@@ -7,6 +7,7 @@ import java.io.File
 import java.io.FileInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.isActive
 
 class VoskEngineImpl : STTEngine {
     override suspend fun transcribe(
@@ -27,9 +28,12 @@ class VoskEngineImpl : STTEngine {
             val totalBytes = audioFile.length() - 44
             var bytesReadTotal = 0L
             val buffer = ByteArray(4096)
-            var bytesRead: Int
+            var bytesRead = 0
 
             while (fis.read(buffer).also { bytesRead = it } >= 0) {
+                if (!this@withContext.isActive) {
+                    break
+                }
                 bytesReadTotal += bytesRead
                 if (totalBytes > 0) {
                     onProgress(bytesReadTotal.toFloat() / totalBytes.toFloat())
