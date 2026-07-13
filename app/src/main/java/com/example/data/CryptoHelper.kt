@@ -11,7 +11,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 object CryptoHelper {
     private const val ANDROID_KEY_STORE = "AndroidKeyStore"
-    private const val KEY_ALIAS = "SnapScribeKey"
+    private const val KEY_ALIAS = "AudioScribeKey"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
 
     init {

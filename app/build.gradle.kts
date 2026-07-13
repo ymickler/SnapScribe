@@ -17,7 +17,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.ymickler.snapscribe"
+    applicationId = "com.ymickler.audioscribe"
     minSdk = 24
     targetSdk = 36
     versionCode = 1

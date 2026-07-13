@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">SnapScribe</string>
+    <string name="app_name">AudioScribe</string>
     <string name="search_hint">Transkriptionen durchsuchen... (Enter drücken)</string>
     <string name="title_history">Transkriptionsverlauf</string>
     <string name="btn_copy">Kopieren</string>
@@ -35,8 +35,8 @@
     <string name="settings_gemini_warning_text">Wenn du einen API-Key einträgst, wird die Transkription über Google Cloud Server verarbeitet, um bessere Qualität zu erzielen. Dadurch ist die App nicht mehr rein \'Local-First\' und Audiodaten verlassen dein Gerät.</string>
     <string name="settings_gemini_privacy_tip_title">Privatsphäre &amp; API Key Tipp</string>
     <string name="settings_gemini_privacy_tip_text">Für 100% Offline-Privatsphäre lasse dieses Feld einfach leer. Die Erkennung läuft dann vollständig lokal ab. Deinen eigenen Key kannst du kostenlos in der Google AI Studio Konsole erstellen.</string>
-    <string name="settings_about_title">Über SnapScribe</string>
-    <string name="settings_about_text">SnapScribe ist ein komplett freies, quelloffenes und lokales Tool zum Transkribieren von Sprachnachrichten direkt auf deinem Gerät.\n\nEs läuft zu 100% offline ohne jegliche Internetverbindung oder Server-Kommunikation (außer bei Verwendung eines optionalen API-Schlüssels). Deine privaten Daten bleiben sicher auf deinem Smartphone.</string>
+    <string name="settings_about_title">Über AudioScribe</string>
+    <string name="settings_about_text">AudioScribe ist ein komplett freies, quelloffenes und lokales Tool zum Transkribieren von Sprachnachrichten direkt auf deinem Gerät.\n\nEs läuft zu 100% offline ohne jegliche Internetverbindung oder Server-Kommunikation (außer bei Verwendung eines optionalen API-Schlüssels). Deine privaten Daten bleiben sicher auf deinem Smartphone.</string>
     <string name="settings_system_title">Systeminformationen</string>
     <string name="settings_system_version">Version</string>
     <string name="settings_system_license">Lizenz</string>

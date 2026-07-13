@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">SnapScribe</string>
+    <string name="app_name">AudioScribe</string>
     <string name="search_hint">Search past transcriptions... (Press Enter)</string>
     <string name="title_history">Transcription History</string>
     <string name="btn_copy">Copy</string>
@@ -35,8 +35,8 @@
     <string name="settings_gemini_warning_text">If you enter an API key, voice files are processed via Google\'s cloud servers to provide premium transcription quality. This means the app is no longer strictly local-first, and audio data leaves your device.</string>
     <string name="settings_gemini_privacy_tip_title">Privacy &amp; API Key Tip</string>
     <string name="settings_gemini_privacy_tip_text">For 100% offline privacy, simply leave this field empty. Speech recognition will run entirely locally on your device. You can generate a free personal key in the Google AI Studio console.</string>
-    <string name="settings_about_title">About SnapScribe</string>
-    <string name="settings_about_text">SnapScribe is a completely free, open-source, and local tool for transcribing voice messages directly on your device.\n\nIt runs 100% offline without any internet connection or server communication (unless using an optional API key). Your private data remains secure on your smartphone.</string>
+    <string name="settings_about_title">About AudioScribe</string>
+    <string name="settings_about_text">AudioScribe is a completely free, open-source, and local tool for transcribing voice messages directly on your device.\n\nIt runs 100% offline without any internet connection or server communication (unless using an optional API key). Your private data remains secure on your smartphone.</string>
     <string name="settings_system_title">System Information</string>
     <string name="settings_system_version">Version</string>
     <string name="settings_system_license">License</string>

@@ -3,13 +3,13 @@ package com.example.data
 import java.util.Locale
 
 /**
- * Localization helper for SnapScribe providing instant UI translation
+ * Localization helper for AudioScribe providing instant UI translation
  * for German and English without activity recreation issues.
  */
 object Localization {
     private val translations = mapOf(
         "en" to mapOf(
-            "app_name" to "SnapScribe",
+            "app_name" to "AudioScribe",
             "tab_history" to "History",
             "tab_settings" to "Settings",
             "search_hint" to "Search past transcriptions...",
@@ -40,8 +40,8 @@ object Localization {
             "settings_gemini_warning_text" to "If you enter an API key, voice files are processed via Google's cloud servers to provide premium transcription quality. This means the app is no longer strictly local-first, and audio data leaves your device.",
             "settings_gemini_privacy_tip_title" to "Privacy & API Key Tip",
             "settings_gemini_privacy_tip_text" to "For 100% offline privacy, simply leave this field empty. Speech recognition will run entirely locally on your device. You can generate a free personal key in the Google AI Studio console.",
-            "about_header" to "About SnapScribe",
-            "about_desc" to "SnapScribe is a completely free, open-source, and local tool for transcribing voice messages directly on your device.\n\nIt runs 100% offline without any internet connection or server communication. Your private data remains safe on your smartphone.",
+            "about_header" to "About AudioScribe",
+            "about_desc" to "AudioScribe is a completely free, open-source, and local tool for transcribing voice messages directly on your device.\n\nIt runs 100% offline without any internet connection or server communication. Your private data remains safe on your smartphone.",
             "system_info_title" to "System Information",
             "system_info_version" to "Version",
             "system_info_license" to "License",
@@ -58,10 +58,10 @@ object Localization {
             "notification_action_share" to "Share",
             "toast_service_started" to "Transcription started in background",
             "sandbox_header" to "Preview Sandbox",
-            "sandbox_desc" to "Simulate incoming WhatsApp audio shares to test SnapScribe in the browser emulator.",
+            "sandbox_desc" to "Simulate incoming WhatsApp audio shares to test AudioScribe in the browser emulator.",
             "sandbox_btn_simulate" to "Simulate Shared Audio",
             "onboarding_title" to "Setup Offline Transcription",
-            "onboarding_desc" to "To transcribe voice messages offline without any cloud keys, SnapScribe needs to download a small language model. Please choose your preferences below.",
+            "onboarding_desc" to "To transcribe voice messages offline without any cloud keys, AudioScribe needs to download a small language model. Please choose your preferences below.",
             "onboarding_engine_title" to "1. Select Transcription Engine:",
             "onboarding_lang_title" to "2. Select Language:",
             "onboarding_whisper_size_title" to "2. Select Whisper Model Size:",
@@ -70,7 +70,7 @@ object Localization {
             "onboarding_skip_btn" to "Skip Setup",
             "onboarding_downloading" to "Downloading: %d%%",
             "banner_model_required_title" to "Offline Model Required",
-            "banner_model_required_desc" to "SnapScribe requires a model to transcribe voice messages offline. Currently selected: %s (%s).",
+            "banner_model_required_desc" to "AudioScribe requires a model to transcribe voice messages offline. Currently selected: %s (%s).",
             "banner_model_required_btn" to "Go to Settings to Download",
             "cancel_dialog_title" to "Cancel Transcription?",
             "cancel_dialog_desc" to "Are you sure you want to cancel the ongoing offline transcription?",
@@ -81,7 +81,7 @@ object Localization {
             "overlay_model_label" to "Model:"
         ),
         "de" to mapOf(
-            "app_name" to "SnapScribe",
+            "app_name" to "AudioScribe",
             "tab_history" to "Verlauf",
             "tab_settings" to "Einstellungen",
             "search_hint" to "Verlauf durchsuchen...",
@@ -112,8 +112,8 @@ object Localization {
             "settings_gemini_warning_text" to "Wenn du einen API-Key einträgst, wird die Transkription über Google Cloud Server verarbeitet, um bessere Qualität zu erzielen. Dadurch ist die App nicht mehr rein 'Local-First' und Audiodaten verlassen dein Gerät.",
             "settings_gemini_privacy_tip_title" to "Privatsphäre & API Key Tipp",
             "settings_gemini_privacy_tip_text" to "Für 100% Offline-Privatsphäre lasse dieses Feld einfach leer. Die Erkennung läuft dann vollständig lokal ab. Deinen eigenen Key kannst du kostenlos in der Google AI Studio Konsole erstellen.",
-            "about_header" to "Über SnapScribe",
-            "about_desc" to "SnapScribe ist ein komplett freies, quelloffenes und lokales Tool zum Transkribieren von Sprachnachrichten direkt auf deinem Gerät.\n\nEs läuft zu 100% offline ohne jegliche Internetverbindung oder Server-Kommunikation. Deine privaten Daten bleiben sicher auf deinem Smartphone.",
+            "about_header" to "Über AudioScribe",
+            "about_desc" to "AudioScribe ist ein komplett freies, quelloffenes und lokales Tool zum Transkribieren von Sprachnachrichten direkt auf deinem Gerät.\n\nEs läuft zu 100% offline ohne jegliche Internetverbindung oder Server-Kommunikation. Deine privaten Daten bleiben sicher auf deinem Smartphone.",
             "system_info_title" to "Systeminformationen",
             "system_info_version" to "Version",
             "system_info_license" to "Lizenz",
@@ -130,10 +130,10 @@ object Localization {
             "notification_action_share" to "Teilen",
             "toast_service_started" to "Transkription im Hintergrund gestartet",
             "sandbox_header" to "Vorschau Sandbox",
-            "sandbox_desc" to "Simuliere geteilte WhatsApp-Audiodateien, um SnapScribe im Browser-Emulator zu testen.",
+            "sandbox_desc" to "Simuliere geteilte WhatsApp-Audiodateien, um AudioScribe im Browser-Emulator zu testen.",
             "sandbox_btn_simulate" to "Geteilte Sprachnachricht simulieren",
             "onboarding_title" to "Offline-Transkription einrichten",
-            "onboarding_desc" to "Um Sprachnachrichten offline ohne Cloud-Schlüssel zu transkribieren, muss SnapScribe ein kleines Sprachmodell herunterladen. Bitte wähle unten deine Einstellungen.",
+            "onboarding_desc" to "Um Sprachnachrichten offline ohne Cloud-Schlüssel zu transkribieren, muss AudioScribe ein kleines Sprachmodell herunterladen. Bitte wähle unten deine Einstellungen.",
             "onboarding_engine_title" to "1. Transkriptions-Engine auswählen:",
             "onboarding_lang_title" to "2. Sprache auswählen:",
             "onboarding_whisper_size_title" to "2. Whisper-Modellgröße auswählen:",
@@ -142,7 +142,7 @@ object Localization {
             "onboarding_skip_btn" to "Einrichtung überspringen",
             "onboarding_downloading" to "Lade herunter: %d%%",
             "banner_model_required_title" to "Offline-Modell erforderlich",
-            "banner_model_required_desc" to "SnapScribe benötigt ein Modell, um Sprachnachrichten offline zu transkribieren. Aktuell ausgewählt: %s (%s).",
+            "banner_model_required_desc" to "AudioScribe benötigt ein Modell, um Sprachnachrichten offline zu transkribieren. Aktuell ausgewählt: %s (%s).",
             "banner_model_required_btn" to "Zum Herunterladen in die Einstellungen",
             "cancel_dialog_title" to "Transkription abbrechen?",
             "cancel_dialog_desc" to "Möchtest du die laufende Offline-Transkription wirklich abbrechen?",

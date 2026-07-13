@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "SnapScribe"
+rootProject.name = "AudioScribe"
 
 include(":app")
