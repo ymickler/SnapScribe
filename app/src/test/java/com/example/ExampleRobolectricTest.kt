@@ -180,4 +180,27 @@ class ExampleRobolectricTest {
         assertFalse("onError should not be called upon cancellation", errorCalled)
         assertFalse("onComplete should not be called upon cancellation", completedCalled)
     }
+
+    @Test
+    fun testTranscriptionOverlayServiceLifecycleAndActions() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val serviceIntent = Intent(context, TranscriptionOverlayService::class.java).apply {
+            putExtra(TranscriptionOverlayService.EXTRA_AUDIO_URI, "mock://audio/test")
+        }
+        
+        val controller = org.robolectric.Robolectric.buildService(TranscriptionOverlayService::class.java, serviceIntent)
+        controller.create()
+        controller.startCommand(0, 1)
+        val service = controller.get()
+        
+        assertNotNull(service)
+        
+        // Test Cancel Action
+        val cancelIntent = Intent(context, TranscriptionOverlayService::class.java).apply {
+            action = TranscriptionOverlayService.ACTION_CANCEL_TRANSCRIPTION
+        }
+        controller.startCommand(cancelIntent, 0, 2)
+        
+        controller.destroy()
+    }
 }

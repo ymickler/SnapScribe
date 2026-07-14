@@ -78,6 +78,8 @@ class TranscriptionOverlayService : Service() {
         const val EXTRA_AUDIO_URI = "extra_audio_uri"
         private const val NOTIFICATION_ID = 8888
         private const val CHANNEL_ID = "snapscripe_transcription_channel"
+        const val ACTION_CANCEL_TRANSCRIPTION = "com.example.action.CANCEL_TRANSCRIPTION"
+        const val ACTION_SWITCH_MODEL = "com.example.action.SWITCH_MODEL"
     }
 
     private var windowManager: WindowManager? = null
@@ -146,9 +148,17 @@ class TranscriptionOverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action
+        if (action == ACTION_CANCEL_TRANSCRIPTION) {
+            cancelOngoingTranscription()
+            return START_NOT_STICKY
+        } else if (action == ACTION_SWITCH_MODEL) {
+            switchModelAndRestart()
+            return START_NOT_STICKY
+        }
+
         val audioUriString = intent?.getStringExtra(EXTRA_AUDIO_URI)
         if (audioUriString != null) {
-            currentAudioUriString = cacheAudioLocally(audioUriString) ?: audioUriString
             startForeground(NOTIFICATION_ID, createNotification())
             lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_START)
             lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
@@ -161,11 +171,64 @@ class TranscriptionOverlayService : Service() {
             } else {
                 showOverlay()
             }
-            startTranscription(currentAudioUriString)
+
+            CoroutineScope(Dispatchers.IO).launch {
+                val cachedUri = cacheAudioLocally(audioUriString) ?: audioUriString
+                CoroutineScope(Dispatchers.Main).launch {
+                    currentAudioUriString = cachedUri
+                    startTranscription(currentAudioUriString)
+                }
+            }
         } else {
             stopSelf()
         }
         return START_NOT_STICKY
+    }
+
+    private fun cancelOngoingTranscription() {
+        activeJob?.cancel()
+        dismissOverlayAndStop()
+    }
+
+    private fun switchModelAndRestart() {
+        installedModels = ModelDownloader(this).installedModels()
+        if (installedModels.size > 1) {
+            val settings = DependencyProvider.getSettingsManager(this)
+            val current = currentModelType ?: resolveCurrentModelType()
+            val currentIndex = installedModels.indexOf(current)
+            val nextIndex = if (currentIndex != -1) {
+                (currentIndex + 1) % installedModels.size
+            } else {
+                0
+            }
+            val nextModel = installedModels[nextIndex]
+            startTranscription(currentAudioUriString, nextModel)
+        } else {
+            val settings = DependencyProvider.getSettingsManager(this)
+            val toastMsg = if (settings.uiLanguage == "de") {
+                "Keine weiteren Modelle installiert"
+            } else {
+                "No other models installed"
+            }
+            Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun resolveCurrentModelType(): ModelDownloader.ModelType {
+        val settings = DependencyProvider.getSettingsManager(this)
+        val engineType = settings.sttEngine
+        val langCode = settings.getTargetLanguageCode()
+        return when {
+            engineType == "whisper" -> {
+                when (settings.whisperModelSize) {
+                    "base" -> ModelDownloader.ModelType.WHISPER_BASE
+                    "small" -> ModelDownloader.ModelType.WHISPER_SMALL
+                    else -> ModelDownloader.ModelType.WHISPER_TINY
+                }
+            }
+            langCode == "de" -> ModelDownloader.ModelType.VOSK_DE
+            else -> ModelDownloader.ModelType.VOSK_EN
+        }
     }
 
     private fun startTranscription(uriString: String, modelOverride: ModelDownloader.ModelType? = null) {
@@ -635,12 +698,37 @@ class TranscriptionOverlayService : Service() {
         val title = com.example.data.Localization.getString("notification_title_started", uiLanguage)
         val text = com.example.data.Localization.getString("notification_desc_started", uiLanguage)
 
+        val cancelIntent = Intent(this, TranscriptionOverlayService::class.java).apply {
+            action = ACTION_CANCEL_TRANSCRIPTION
+        }
+        val pendingCancelIntent = android.app.PendingIntent.getService(
+            this,
+            100,
+            cancelIntent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val switchIntent = Intent(this, TranscriptionOverlayService::class.java).apply {
+            action = ACTION_SWITCH_MODEL
+        }
+        val pendingSwitchIntent = android.app.PendingIntent.getService(
+            this,
+            101,
+            switchIntent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val cancelLabel = com.example.data.Localization.getString("notification_action_cancel", uiLanguage)
+        val switchLabel = com.example.data.Localization.getString("notification_action_switch_model", uiLanguage)
+
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle(title)
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setSilent(true)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, cancelLabel, pendingCancelIntent)
+            .addAction(android.R.drawable.ic_menu_manage, switchLabel, pendingSwitchIntent)
             .build()
     }
 
@@ -651,13 +739,41 @@ class TranscriptionOverlayService : Service() {
         CoroutineScope(Dispatchers.Main).launch {
             val title = com.example.data.Localization.getString("notification_title_started", settings.uiLanguage)
             
+            val cancelIntent = Intent(this@TranscriptionOverlayService, TranscriptionOverlayService::class.java).apply {
+                action = ACTION_CANCEL_TRANSCRIPTION
+            }
+            val pendingCancelIntent = android.app.PendingIntent.getService(
+                this@TranscriptionOverlayService,
+                100,
+                cancelIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val switchIntent = Intent(this@TranscriptionOverlayService, TranscriptionOverlayService::class.java).apply {
+                action = ACTION_SWITCH_MODEL
+            }
+            val pendingSwitchIntent = android.app.PendingIntent.getService(
+                this@TranscriptionOverlayService,
+                101,
+                switchIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val cancelLabel = com.example.data.Localization.getString("notification_action_cancel", settings.uiLanguage)
+            val switchLabel = com.example.data.Localization.getString("notification_action_switch_model", settings.uiLanguage)
+            
+            val activeModelName = currentModelType?.let { " (${it.displayLabel})" } ?: ""
+            val fullTitle = title + activeModelName
+
             val builder = NotificationCompat.Builder(this@TranscriptionOverlayService, CHANNEL_ID)
-                .setContentTitle(title)
+                .setContentTitle(fullTitle)
                 .setContentText(status)
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setSilent(true)
                 .setProgress(100, (progress * 100).toInt(), false)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, cancelLabel, pendingCancelIntent)
+                .addAction(android.R.drawable.ic_menu_manage, switchLabel, pendingSwitchIntent)
                 
             if (partialText.isNotEmpty()) {
                 builder.setStyle(NotificationCompat.BigTextStyle().bigText("$status\n\n$partialText"))
