@@ -806,11 +806,15 @@ fun MainScreen() {
                                 Spacer(modifier = Modifier.height(6.dp))
 
                                 var selectedWhisperSize by remember { mutableStateOf(settingsManager.whisperModelSize) }
-                                val whisperSizeOptions = listOf(
-                                    "tiny" to "Tiny (~75 MB)",
-                                    "base" to "Base (~140 MB)",
-                                    "small" to "Small (~460 MB)"
-                                )
+                                val whisperSizeOptions = remember {
+                                    listOf("tiny", "base", "small").map { sizeCode ->
+                                        val modelType = com.example.engine.ModelDownloader.ModelType.values()
+                                            .find { it.engine == "whisper" && it.language == sizeCode }
+                                        val sizeStr = modelType?.sizeLabel ?: ""
+                                        val displayName = sizeCode.replaceFirstChar { it.uppercase() }
+                                        sizeCode to "$displayName ($sizeStr)"
+                                    }
+                                }
 
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -1130,8 +1134,17 @@ fun MainScreen() {
                         }
                     } else {
                         Text(Localization.getString("onboarding_whisper_size_title", uiLanguage), fontWeight = FontWeight.Bold, color = SleekText, fontSize = 12.sp)
+                        val whisperWizardOptions = remember {
+                            listOf("tiny", "base", "small").map { sizeCode ->
+                                val modelType = com.example.engine.ModelDownloader.ModelType.values()
+                                    .find { it.engine == "whisper" && it.language == sizeCode }
+                                val sizeStr = modelType?.sizeLabel ?: ""
+                                val displayName = sizeCode.replaceFirstChar { it.uppercase() }
+                                sizeCode to "$displayName ($sizeStr)"
+                            }
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("tiny" to "Tiny (~75MB)", "base" to "Base (~140MB)", "small" to "Small (~460MB)").forEach { (code, label) ->
+                            whisperWizardOptions.forEach { (code, label) ->
                                 val isSelected = wizardWhisperSize == code
                                 Box(
                                     modifier = Modifier
