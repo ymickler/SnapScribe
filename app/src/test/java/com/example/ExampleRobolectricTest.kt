@@ -1,7 +1,9 @@
 package com.example
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import com.example.service.TranscriptionOverlayService
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.AppDatabase
 import com.example.data.TranscriptionDao
@@ -114,7 +116,7 @@ class ExampleRobolectricTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val testDispatcher = kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)
         val engine = LocalTranscriptionEngine(context, testDispatcher)
-        val fakeUri = Uri.parse("content://media/external/audio/media/1")
+        val fakeUri = Uri.parse("mock://audio/whatsapp_voice_message_de")
 
         var startedCalled = false
         var progressReported = false
@@ -155,7 +157,7 @@ class ExampleRobolectricTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val testDispatcher = kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)
         val engine = LocalTranscriptionEngine(context, testDispatcher)
-        val fakeUri = Uri.parse("content://media/external/audio/media/1")
+        val fakeUri = Uri.parse("mock://audio/whatsapp_voice_message_de")
 
         var errorCalled = false
         var completedCalled = false
@@ -199,7 +201,7 @@ class ExampleRobolectricTest {
         val cancelIntent = Intent(context, TranscriptionOverlayService::class.java).apply {
             action = TranscriptionOverlayService.ACTION_CANCEL_TRANSCRIPTION
         }
-        controller.startCommand(cancelIntent, 0, 2)
+        service.onStartCommand(cancelIntent, 0, 2)
         
         controller.destroy()
     }

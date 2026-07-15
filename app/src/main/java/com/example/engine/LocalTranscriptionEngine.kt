@@ -42,6 +42,28 @@ class LocalTranscriptionEngine(
                 val engineType = settingsManager.sttEngine
                 val langCode = settingsManager.getTargetLanguageCode()
 
+                if (audioUri.toString().startsWith("mock://")) {
+                    val isDe = audioUri.toString().contains("de") || langCode == "de"
+                    val mockText = if (isDe) {
+                        "Hallo, das ist eine simulierte Sprachnachricht für die App AudioScribe."
+                    } else {
+                        "Hello, this is a simulated voice message for the AudioScribe app."
+                    }
+                    callback.onProgress(0.15f)
+                    kotlinx.coroutines.delay(50)
+                    callback.onProgress(0.40f)
+                    kotlinx.coroutines.delay(50)
+                    callback.onProgress(0.70f)
+                    callback.onPartialResult(if (isDe) "Hallo, das ist" else "Hello, this is")
+                    kotlinx.coroutines.delay(50)
+                    callback.onProgress(0.90f)
+                    callback.onPartialResult(mockText)
+                    kotlinx.coroutines.delay(50)
+                    callback.onProgress(1.0f)
+                    callback.onComplete(mockText)
+                    return@launch
+                }
+
                 val modelType = modelOverride ?: when {
                     engineType == "whisper" -> {
                         when (settingsManager.whisperModelSize) {

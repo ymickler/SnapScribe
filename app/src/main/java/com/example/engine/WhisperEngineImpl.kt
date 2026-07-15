@@ -1,5 +1,6 @@
 package com.example.engine
 
+import com.example.data.SettingsManager
 import dev.ffmpegkit.whisper.Whisper
 import dev.ffmpegkit.whisper.WhisperConfig
 import kotlinx.coroutines.Dispatchers
@@ -43,8 +44,17 @@ class WhisperEngineImpl : STTEngine {
             whisperModel = Whisper.loadModel(context, modelPath)
             onProgress(0.15f)
             
-            // Assuming default config if we pass null or empty config
-            val config = WhisperConfig()
+            val settingsManager = SettingsManager(context)
+            val langCode = settingsManager.getTargetLanguageCode()
+            val threadsCount = Runtime.getRuntime().availableProcessors().coerceIn(2, 6)
+
+            val config = WhisperConfig(
+                language = langCode,
+                translate = false,
+                threads = threadsCount,
+                maxSegmentLength = 0,
+                printTimestamps = false
+            )
             
             // Whisper.transcribe(model, audioPath, config) is suspend
             val result = Whisper.transcribe(whisperModel, audioFile.absolutePath, config)
