@@ -46,7 +46,7 @@ class WhisperEngineImpl : STTEngine {
             
             val settingsManager = SettingsManager(context)
             val langCode = settingsManager.getTargetLanguageCode()
-            val threadsCount = Runtime.getRuntime().availableProcessors().coerceIn(2, 6)
+            val threadsCount = Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
 
             val config = WhisperConfig(
                 language = langCode,

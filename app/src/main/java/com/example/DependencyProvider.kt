@@ -33,4 +33,10 @@ object DependencyProvider {
             sm
         }
     }
+
+    fun setTestInstances(db: AppDatabase?, repo: TranscriptionRepository?, sm: SettingsManager?) {
+        database = db
+        repository = repo
+        settingsManager = sm
+    }
 }

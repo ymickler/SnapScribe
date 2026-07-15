@@ -88,22 +88,28 @@ class TranscriptionOverlayService : Service() {
     // Dedicated Compose lifecycle owner
     private val lifecycleOwner = MyLifecycleOwner()
 
-    // Mutable states observed by Compose
-    private var transcriptionStatus by mutableStateOf("Initializing...")
-    private var transcriptionProgress by mutableStateOf(0.0f)
-    private var transcribedText by mutableStateOf("")
-    private var isCompleted by mutableStateOf(false)
-    private var isError by mutableStateOf(false)
-    private var errorMsg by mutableStateOf("")
-    private var showCancelConfirmation by mutableStateOf(false)
-    private var activeJob: kotlinx.coroutines.Job? = null
-    private var activeModelType by mutableStateOf<com.example.engine.ModelDownloader.ModelType?>(null)
-    private var currentAudioUriString: String = ""
-    private var currentModelType by mutableStateOf<ModelDownloader.ModelType?>(null)
+    data class QueueItem(
+        val id: String,
+        val originalUriString: String,
+        var cachedUriString: String? = null,
+        var status: String = "Waiting...",
+        var progress: Float = 0f,
+        var text: String = "",
+        var isCompleted: Boolean = false,
+        var isError: Boolean = false,
+        var errorMsg: String = "",
+        var currentModelType: ModelDownloader.ModelType? = null,
+        var savedEntityId: Int? = null,
+        var savedTimestamp: Long? = null,
+        var activeJob: kotlinx.coroutines.Job? = null
+    )
+
+    // Queue state observed by Compose
+    private val transcriptionQueue = mutableStateListOf<QueueItem>()
+    private var isProcessingQueue = false
+
     private var installedModels by mutableStateOf<List<ModelDownloader.ModelType>>(emptyList())
     private var showModelMenu by mutableStateOf(false)
-    private var savedEntityId: Int? = null
-    private var savedTimestamp: Long? = null
     private var cachedLocalAudioFile: File? = null
     private var currentSessionId = 0
 
@@ -172,29 +178,194 @@ class TranscriptionOverlayService : Service() {
                 showOverlay()
             }
 
-            CoroutineScope(Dispatchers.IO).launch {
-                val cachedUri = cacheAudioLocally(audioUriString) ?: audioUriString
-                CoroutineScope(Dispatchers.Main).launch {
-                    currentAudioUriString = cachedUri
-                    startTranscription(currentAudioUriString)
-                }
-            }
+            enqueueAudio(audioUriString)
         } else {
-            stopSelf()
+            if (transcriptionQueue.isEmpty()) {
+                stopSelf()
+            }
         }
         return START_NOT_STICKY
     }
 
+    private fun enqueueAudio(audioUriString: String) {
+        val itemId = java.util.UUID.randomUUID().toString()
+        val item = QueueItem(id = itemId, originalUriString = audioUriString)
+        transcriptionQueue.add(item)
+        
+        CoroutineScope(Dispatchers.IO).launch {
+            val cachedUri = cacheAudioLocally(audioUriString) ?: audioUriString
+            CoroutineScope(Dispatchers.Main).launch {
+                item.cachedUriString = cachedUri
+                updateQueueItem(item)
+                checkAndProcessQueue()
+            }
+        }
+    }
+
+    private fun checkAndProcessQueue() {
+        if (isProcessingQueue) return
+        val nextItem = transcriptionQueue.firstOrNull { !it.isCompleted && !it.isError && it.activeJob == null }
+        if (nextItem != null) {
+            processQueueItem(nextItem)
+        } else {
+            val settings = DependencyProvider.getSettingsManager(this)
+            if (settings.showAsNotification && transcriptionQueue.all { it.isCompleted || it.isError }) {
+                stopSelf()
+            }
+        }
+    }
+
+    private fun processQueueItem(item: QueueItem) {
+        isProcessingQueue = true
+        item.status = "Loading Offline Engine..."
+        item.progress = 0.05f
+        updateQueueItem(item)
+        updateOverallProgressNotification()
+
+        val uri = Uri.parse(item.cachedUriString ?: item.originalUriString)
+        val engine = LocalTranscriptionEngine(this)
+        val settings = DependencyProvider.getSettingsManager(this)
+        val targetLanguage = settings.getTargetLanguageCode()
+
+        val sessionId = ++currentSessionId
+        val job = engine.transcribeAudio(uri, object : LocalTranscriptionEngine.TranscriptionCallback {
+            override fun onStart() {
+                if (sessionId != currentSessionId) return
+                item.status = "Loading Offline Engine..."
+                item.progress = 0.05f
+                updateQueueItem(item)
+                updateOverallProgressNotification()
+            }
+
+            override fun onModelResolved(modelType: ModelDownloader.ModelType) {
+                if (sessionId != currentSessionId) return
+                item.currentModelType = modelType
+                updateQueueItem(item)
+            }
+
+            override fun onProgress(progress: Float) {
+                if (sessionId != currentSessionId) return
+                val isWhisper = (item.currentModelType?.engine ?: settings.sttEngine) == "whisper"
+                item.status = when {
+                    isWhisper -> {
+                        when {
+                            progress < 0.15f -> "Loading Whisper model..."
+                            progress < 0.4f -> "Analyzing audio waves..."
+                            progress < 0.7f -> "Decoding speech patterns..."
+                            progress < 0.9f -> "Synthesizing text..."
+                            else -> "Finishing up..."
+                        }
+                    }
+                    else -> "Transcribing... (${(progress * 100).toInt()}%)"
+                }
+                item.progress = progress
+                updateQueueItem(item)
+                updateOverallProgressNotification()
+            }
+
+            override fun onPartialResult(text: String) {
+                if (sessionId != currentSessionId) return
+                item.text = text
+                updateQueueItem(item)
+                updateOverallProgressNotification()
+            }
+
+            override fun onComplete(fullText: String) {
+                if (sessionId != currentSessionId) return
+                item.text = fullText
+                item.progress = 1.0f
+                item.status = "Completed"
+                item.isCompleted = true
+                item.activeJob = null
+                updateQueueItem(item)
+
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val repository = DependencyProvider.getRepository(this@TranscriptionOverlayService)
+                        val entity = TranscriptionEntity(
+                            id = item.savedEntityId ?: 0,
+                            audioUri = item.originalUriString,
+                            transcribedText = fullText,
+                            language = targetLanguage,
+                            timestamp = item.savedTimestamp ?: System.currentTimeMillis()
+                        )
+                        val id = repository.insert(entity)
+                        item.savedEntityId = id.toInt()
+                        item.savedTimestamp = entity.timestamp
+                        updateQueueItem(item)
+
+                        CoroutineScope(Dispatchers.Main).launch {
+                            showCompletedNotification(this@TranscriptionOverlayService, id.toInt(), fullText)
+                            isProcessingQueue = false
+                            checkAndProcessQueue()
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        CoroutineScope(Dispatchers.Main).launch {
+                            isProcessingQueue = false
+                            checkAndProcessQueue()
+                        }
+                    }
+                }
+            }
+
+            override fun onError(error: String) {
+                if (sessionId != currentSessionId) return
+                item.isError = true
+                item.errorMsg = error
+                item.status = "Error occurred"
+                item.activeJob = null
+                updateQueueItem(item)
+
+                showErrorNotification(this@TranscriptionOverlayService, error)
+
+                isProcessingQueue = false
+                checkAndProcessQueue()
+            }
+        }, item.currentModelType)
+
+        item.activeJob = job
+        updateQueueItem(item)
+    }
+
+    private fun updateQueueItem(item: QueueItem) {
+        val index = transcriptionQueue.indexOfFirst { it.id == item.id }
+        if (index != -1) {
+            transcriptionQueue[index] = item.copy()
+        }
+    }
+
+    private fun cancelQueueItem(itemId: String) {
+        val item = transcriptionQueue.find { it.id == itemId } ?: return
+        item.activeJob?.cancel()
+        transcriptionQueue.remove(item)
+
+        if (item.activeJob != null) {
+            isProcessingQueue = false
+            checkAndProcessQueue()
+        }
+
+        if (transcriptionQueue.isEmpty()) {
+            dismissOverlayAndStop()
+        } else {
+            updateOverallProgressNotification()
+        }
+    }
+
     private fun cancelOngoingTranscription() {
-        activeJob?.cancel()
-        dismissOverlayAndStop()
+        val activeItem = transcriptionQueue.find { it.activeJob != null }
+        if (activeItem != null) {
+            cancelQueueItem(activeItem.id)
+        } else {
+            dismissOverlayAndStop()
+        }
     }
 
     private fun switchModelAndRestart() {
+        val activeItem = transcriptionQueue.find { it.activeJob != null } ?: return
         installedModels = ModelDownloader(this).installedModels()
         if (installedModels.size > 1) {
-            val settings = DependencyProvider.getSettingsManager(this)
-            val current = currentModelType ?: resolveCurrentModelType()
+            val current = activeItem.currentModelType ?: resolveCurrentModelType()
             val currentIndex = installedModels.indexOf(current)
             val nextIndex = if (currentIndex != -1) {
                 (currentIndex + 1) % installedModels.size
@@ -202,7 +373,18 @@ class TranscriptionOverlayService : Service() {
                 0
             }
             val nextModel = installedModels[nextIndex]
-            startTranscription(currentAudioUriString, nextModel)
+
+            activeItem.activeJob?.cancel()
+            activeItem.activeJob = null
+            activeItem.isCompleted = false
+            activeItem.isError = false
+            activeItem.text = ""
+            activeItem.progress = 0f
+            activeItem.currentModelType = nextModel
+            updateQueueItem(activeItem)
+
+            isProcessingQueue = false
+            checkAndProcessQueue()
         } else {
             val settings = DependencyProvider.getSettingsManager(this)
             val toastMsg = if (settings.uiLanguage == "de") {
@@ -212,6 +394,26 @@ class TranscriptionOverlayService : Service() {
             }
             Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun updateOverallProgressNotification() {
+        val settings = DependencyProvider.getSettingsManager(this)
+        if (!settings.showAsNotification) return
+
+        val activeIndex = transcriptionQueue.indexOfFirst { it.activeJob != null }
+        if (activeIndex == -1) return
+        val activeItem = transcriptionQueue[activeIndex]
+
+        val totalCount = transcriptionQueue.size
+        val currentNum = activeIndex + 1
+
+        val statusText = if (settings.uiLanguage == "de") {
+            "Verarbeite $currentNum von $totalCount (${(activeItem.progress * 100).toInt()}%)"
+        } else {
+            "Processing $currentNum of $totalCount (${(activeItem.progress * 100).toInt()}%)"
+        }
+
+        updateForegroundNotification(statusText, activeItem.progress, activeItem.text)
     }
 
     private fun resolveCurrentModelType(): ModelDownloader.ModelType {
@@ -229,113 +431,6 @@ class TranscriptionOverlayService : Service() {
             langCode == "de" -> ModelDownloader.ModelType.VOSK_DE
             else -> ModelDownloader.ModelType.VOSK_EN
         }
-    }
-
-    private fun startTranscription(uriString: String, modelOverride: ModelDownloader.ModelType? = null) {
-        activeJob?.cancel()
-        val sessionId = ++currentSessionId
-        val context = this
-        val uri = Uri.parse(uriString)
-        val engine = LocalTranscriptionEngine(context)
-
-        // Fetch settings for pre-selected language target
-        val settings = DependencyProvider.getSettingsManager(context)
-        val targetLanguage = settings.getTargetLanguageCode()
-
-        if (modelOverride != null) {
-            // Re-transcribing with a manually picked model: reset the result view without
-            // touching the user's default engine/model settings.
-            isCompleted = false
-            isError = false
-            errorMsg = ""
-            transcribedText = ""
-            transcriptionProgress = 0f
-        }
-
-        activeJob = engine.transcribeAudio(uri, object : LocalTranscriptionEngine.TranscriptionCallback {
-            override fun onStart() {
-                if (sessionId != currentSessionId) return
-                transcriptionStatus = "Loading Offline Engine..."
-                transcriptionProgress = 0.05f
-                updateForegroundNotification(transcriptionStatus, transcriptionProgress)
-            }
-
-            override fun onModelResolved(modelType: ModelDownloader.ModelType) {
-                if (sessionId != currentSessionId) return
-                currentModelType = modelType
-            }
-
-            override fun onProgress(progress: Float) {
-                if (sessionId != currentSessionId) return
-                val isWhisper = (currentModelType?.engine ?: settings.sttEngine) == "whisper"
-                transcriptionStatus = when {
-                    isWhisper -> {
-                        when {
-                            progress < 0.15f -> "Loading Whisper model..."
-                            progress < 0.4f -> "Analyzing audio waves..."
-                            progress < 0.7f -> "Decoding speech patterns..."
-                            progress < 0.9f -> "Synthesizing text..."
-                            else -> "Finishing up..."
-                        }
-                    }
-                    else -> "Transcribing... (${(progress * 100).toInt()}%)"
-                }
-                transcriptionProgress = progress
-                updateForegroundNotification(transcriptionStatus, transcriptionProgress, transcribedText)
-            }
- 
-            override fun onPartialResult(text: String) {
-                if (sessionId != currentSessionId) return
-                transcribedText = text
-                updateForegroundNotification(transcriptionStatus, transcriptionProgress, text)
-            }
- 
-            override fun onComplete(fullText: String) {
-                if (sessionId != currentSessionId) return
-                transcribedText = fullText
-                transcriptionProgress = 1.0f
-                transcriptionStatus = "Completed"
-                isCompleted = true
- 
-                // Save to local database transparently (will be encrypted inside the repo).
-                // If this is a re-transcription with a different model, update the same
-                // history entry in place instead of creating a duplicate.
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        val repository = DependencyProvider.getRepository(context)
-                        val entity = TranscriptionEntity(
-                            id = savedEntityId ?: 0,
-                            audioUri = uriString,
-                            transcribedText = fullText,
-                            language = targetLanguage,
-                            timestamp = savedTimestamp ?: System.currentTimeMillis()
-                        )
-                        val id = repository.insert(entity)
-                        savedEntityId = id.toInt()
-                        savedTimestamp = entity.timestamp
- 
-                        if (settings.showAsNotification) {
-                            showCompletedNotification(context, id.toInt(), fullText)
-                            stopSelf()
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            }
- 
-            override fun onError(error: String) {
-                if (sessionId != currentSessionId) return
-                isError = true
-                errorMsg = error
-                transcriptionStatus = "Error occurred"
- 
-                if (settings.showAsNotification) {
-                    showErrorNotification(context, error)
-                    stopSelf()
-                }
-            }
-        }, modelOverride)
     }
 
     private fun showOverlay() {
@@ -380,8 +475,6 @@ class TranscriptionOverlayService : Service() {
         val displayLang = remember {
             if (settings.getTargetLanguageCode() == "de") "Deutsch (DE)" else "English (EN)"
         }
-        var isExpanded by remember { mutableStateOf(false) }
-        var canExpand by remember { mutableStateOf(false) }
 
         Card(
             modifier = Modifier
@@ -392,287 +485,252 @@ class TranscriptionOverlayService : Service() {
             colors = CardDefaults.cardColors(containerColor = SleekSurface),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            if (showCancelConfirmation) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = com.example.data.Localization.getString("cancel_dialog_title", settings.uiLanguage),
-                        color = SleekPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = com.example.data.Localization.getString("cancel_dialog_desc", settings.uiLanguage),
-                        color = SleekText,
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                showCancelConfirmation = false
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = SleekInnerSurface, contentColor = SleekText),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(com.example.data.Localization.getString("cancel_dialog_btn_keep", settings.uiLanguage), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = getString(R.string.app_name),
+                            color = SleekPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        val queueCount = transcriptionQueue.size
+                        val statusLabel = if (queueCount > 0) {
+                            if (settings.uiLanguage == "de") {
+                                "Warteschlange: $queueCount ${if (queueCount == 1) "Eintrag" else "Einträge"}"
+                            } else {
+                                "Queue: $queueCount ${if (queueCount == 1) "item" else "items"}"
+                            }
+                        } else {
+                            if (settings.uiLanguage == "de") "Leer" else "Empty"
                         }
-                        Button(
-                            onClick = {
+                        Text(
+                            text = statusLabel,
+                            color = SleekText.copy(alpha = 0.7f),
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .background(SleekBackground, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = displayLang,
+                                color = SleekPrimary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        IconButton(
+                            onClick = { 
                                 dismissOverlayAndStop()
                             },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = SleekPrimary, contentColor = SleekButtonText),
-                            shape = RoundedCornerShape(12.dp)
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(SleekBackground)
                         ) {
-                            Text(com.example.data.Localization.getString("cancel_dialog_btn_cancel", settings.uiLanguage), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close All",
+                                tint = SleekText,
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 350.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    transcriptionQueue.forEachIndexed { index, item ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                color = Color.White.copy(alpha = 0.05f),
+                                modifier = Modifier.padding(vertical = 12.dp)
+                            )
+                        }
+                        QueueItemRow(item, settings)
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun QueueItemRow(item: QueueItem, settings: com.example.data.SettingsManager) {
+        val context = LocalContext.current
+        var isExpanded by remember { mutableStateOf(false) }
+        var canExpand by remember { mutableStateOf(false) }
+
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    val statusText = when {
+                        item.isCompleted -> if (settings.uiLanguage == "de") "Abgeschlossen" else "Completed"
+                        item.isError -> if (settings.uiLanguage == "de") "Fehler" else "Failed"
+                        item.activeJob != null -> item.status
+                        else -> if (settings.uiLanguage == "de") "In Warteschlange..." else "Waiting in queue..."
+                    }
+                    Text(
+                        text = statusText,
+                        color = if (item.isError) MaterialTheme.colorScheme.error else SleekPrimary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                IconButton(
+                    onClick = { cancelQueueItem(item.id) },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Cancel item",
+                        tint = SleekText.copy(alpha = 0.5f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            if (item.activeJob != null && !item.isCompleted && !item.isError) {
+                LinearProgressIndicator(
+                    progress = { item.progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                    color = SleekPrimary,
+                    trackColor = SleekInnerSurface,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            if (item.isError) {
+                Text(
+                    text = "Error: ${item.errorMsg}",
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 13.sp,
+                    modifier = Modifier.fillMaxWidth()
+                )
             } else {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    // Header
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = getString(R.string.app_name),
-                                color = SleekPrimary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                            Text(
-                                text = if (isError) "Failed to process voice" else transcriptionStatus,
-                                color = SleekText.copy(alpha = 0.7f),
-                                fontSize = 12.sp
-                            )
-                        }
-
-                        // Display targeted language badge
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .background(SleekBackground, RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = displayLang,
-                                    color = SleekPrimary,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            IconButton(
-                                onClick = { 
-                                    if (!isCompleted && !isError) {
-                                        showCancelConfirmation = true
-                                    } else {
-                                        dismissOverlayAndStop()
-                                    }
-                                },
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(SleekBackground)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Close",
-                                    tint = SleekText,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Progress Indicator
-                    if (!isCompleted && !isError) {
-                        LinearProgressIndicator(
-                            progress = { transcriptionProgress },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp)),
-                            color = SleekPrimary,
-                            trackColor = SleekInnerSurface,
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-
-                    // Error message
-                    if (isError) {
-                        Text(
-                            text = "Error: $errorMsg",
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 13.sp,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                val displayText = item.text.ifEmpty {
+                    if (item.activeJob != null) {
+                        if (settings.uiLanguage == "de") "Analysiere Sprachsegment..." else "Analyzing voice segment..."
                     } else {
-                        // Transcribed text display
-                        val displayText = transcribedText.ifEmpty { "Waiting for offline voice segments..." }
-                        Column {
-                            Text(
-                                text = displayText,
-                                color = SleekText.copy(alpha = if (transcribedText.isEmpty()) 0.4f else 0.95f),
-                                fontSize = 14.sp,
-                                lineHeight = 20.sp,
-                                maxLines = if (isExpanded) Int.MAX_VALUE else 5,
-                                overflow = TextOverflow.Ellipsis,
-                                onTextLayout = { textLayoutResult ->
-                                    if (!isExpanded) {
-                                        canExpand = textLayoutResult.hasVisualOverflow
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(
-                                        if (isExpanded) {
-                                            Modifier
-                                                .heightIn(max = 240.dp)
-                                                .verticalScroll(rememberScrollState())
-                                        } else {
-                                            Modifier
-                                        }
-                                    )
-                            )
-                            if (canExpand || isExpanded) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = if (isExpanded) {
-                                        com.example.data.Localization.getString("btn_show_less", settings.uiLanguage)
-                                    } else {
-                                        com.example.data.Localization.getString("btn_show_more", settings.uiLanguage)
-                                    },
-                                    color = SleekPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier
-                                        .clickable { isExpanded = !isExpanded }
-                                        .padding(vertical = 4.dp)
-                                )
-                            }
+                        if (settings.uiLanguage == "de") "Wartet auf Verarbeitung..." else "Waiting for processing..."
+                    }
+                }
+                Text(
+                    text = displayText,
+                    color = SleekText.copy(alpha = if (item.text.isEmpty()) 0.4f else 0.95f),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    maxLines = if (isExpanded) Int.MAX_VALUE else 3,
+                    overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { textLayoutResult ->
+                        if (!isExpanded) {
+                            canExpand = textLayoutResult.hasVisualOverflow
                         }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (canExpand || isExpanded) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (isExpanded) {
+                            com.example.data.Localization.getString("btn_show_less", settings.uiLanguage)
+                        } else {
+                            com.example.data.Localization.getString("btn_show_more", settings.uiLanguage)
+                        },
+                        color = SleekPrimary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clickable { isExpanded = !isExpanded }
+                            .padding(vertical = 2.dp)
+                    )
+                }
+            }
+
+            if (item.isCompleted && item.text.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("Transcription", item.text)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SleekPrimary,
+                            contentColor = SleekButtonText
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy",
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
 
-                    if (installedModels.size > 1) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Box {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(SleekBackground)
-                                    .clickable { showModelMenu = true }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = com.example.data.Localization.getString("overlay_model_label", settings.uiLanguage) +
-                                        " " + (currentModelType?.let { "${it.displayLabel} (${it.sizeLabel})" } ?: ""),
-                                    color = SleekText,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Icon(
-                                    imageVector = Icons.Default.KeyboardArrowDown,
-                                    contentDescription = null,
-                                    tint = SleekText,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                    Button(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, item.text)
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
                             }
-                            DropdownMenu(
-                                expanded = showModelMenu,
-                                onDismissRequest = { showModelMenu = false }
-                            ) {
-                                installedModels.forEach { model ->
-                                    DropdownMenuItem(
-                                        text = { Text("${model.displayLabel} (${model.sizeLabel})") },
-                                        leadingIcon = if (model == currentModelType) {
-                                            { Icon(imageVector = Icons.Default.Check, contentDescription = null) }
-                                        } else null,
-                                        onClick = {
-                                            showModelMenu = false
-                                            if (model != currentModelType) {
-                                                startTranscription(currentAudioUriString, model)
-                                            }
-                                        }
-                                    )
-                                }
+                            val chooser = Intent.createChooser(intent, "Share Text").apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
                             }
-                        }
-                    }
-
-                    // Action panel once completed
-                    AnimatedVisibility(visible = isCompleted) {
-                        Column {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Button(
-                                    onClick = {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        val clip = ClipData.newPlainText("Transcription", transcribedText)
-                                        clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = SleekPrimary,
-                                        contentColor = SleekButtonText
-                                    ),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "Copy",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Copy", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-
-                                Button(
-                                    onClick = {
-                                        val intent = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(Intent.EXTRA_TEXT, transcribedText)
-                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                        }
-                                        val chooser = Intent.createChooser(intent, "Share Text").apply {
-                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                        }
-                                        context.startActivity(chooser)
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = SleekInnerSurface,
-                                        contentColor = SleekText
-                                    ),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Share,
-                                        contentDescription = "Share",
-                                        tint = SleekText,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Share", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
+                            context.startActivity(chooser)
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SleekInnerSurface,
+                            contentColor = SleekText
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = SleekText,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Share", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -762,7 +820,8 @@ class TranscriptionOverlayService : Service() {
             val cancelLabel = com.example.data.Localization.getString("notification_action_cancel", settings.uiLanguage)
             val switchLabel = com.example.data.Localization.getString("notification_action_switch_model", settings.uiLanguage)
             
-            val activeModelName = currentModelType?.let { " (${it.displayLabel})" } ?: ""
+            val activeItem = transcriptionQueue.find { it.activeJob != null }
+            val activeModelName = activeItem?.currentModelType?.let { " (${it.displayLabel})" } ?: ""
             val fullTitle = title + activeModelName
 
             val builder = NotificationCompat.Builder(this@TranscriptionOverlayService, CHANNEL_ID)
@@ -842,7 +901,7 @@ class TranscriptionOverlayService : Service() {
             .addAction(android.R.drawable.ic_menu_save, btnCopyText, pendingCopyIntent)
             .addAction(android.R.drawable.ic_menu_share, btnShareText, pendingShareIntent)
 
-        notificationManager.notify(8889, builder.build())
+        notificationManager.notify(id, builder.build())
     }
 
     private fun showErrorNotification(context: Context, error: String) {
@@ -856,7 +915,7 @@ class TranscriptionOverlayService : Service() {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
 
-        notificationManager.notify(8890, builder.build())
+        notificationManager.notify((System.currentTimeMillis() % 100000).toInt(), builder.build())
     }
 
     override fun onDestroy() {
@@ -868,6 +927,8 @@ class TranscriptionOverlayService : Service() {
             }
             composeView = null
         }
+        transcriptionQueue.forEach { it.activeJob?.cancel() }
+        transcriptionQueue.clear()
         cachedLocalAudioFile?.delete()
         lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_STOP)

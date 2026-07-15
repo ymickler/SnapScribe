@@ -43,10 +43,12 @@ class ExampleRobolectricTest {
         ).allowMainThreadQueries().build()
         dao = db.transcriptionDao()
         repository = TranscriptionRepository(dao)
+        DependencyProvider.setTestInstances(db, repository, null)
     }
 
     @After
     fun closeDb() {
+        DependencyProvider.setTestInstances(null, null, null)
         db.close()
     }
 
@@ -203,6 +205,74 @@ class ExampleRobolectricTest {
         }
         service.onStartCommand(cancelIntent, 0, 2)
         
+        controller.destroy()
+    }
+
+    @Test
+    fun testServiceQueueSequentialProcessing() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val serviceIntent1 = Intent(context, TranscriptionOverlayService::class.java).apply {
+            putExtra(TranscriptionOverlayService.EXTRA_AUDIO_URI, "mock://audio/whatsapp_de_1")
+        }
+        val controller = org.robolectric.Robolectric.buildService(TranscriptionOverlayService::class.java, serviceIntent1)
+        controller.create()
+        val service = controller.get()
+        service.onStartCommand(serviceIntent1, 0, 1)
+
+        val serviceIntent2 = Intent(context, TranscriptionOverlayService::class.java).apply {
+            putExtra(TranscriptionOverlayService.EXTRA_AUDIO_URI, "mock://audio/whatsapp_de_2")
+        }
+        service.onStartCommand(serviceIntent2, 0, 2)
+
+        val serviceIntent3 = Intent(context, TranscriptionOverlayService::class.java).apply {
+            putExtra(TranscriptionOverlayService.EXTRA_AUDIO_URI, "mock://audio/whatsapp_de_3")
+        }
+        service.onStartCommand(serviceIntent3, 0, 3)
+
+        var allItems: List<TranscriptionEntity> = emptyList()
+        val startTime = System.currentTimeMillis()
+        while (System.currentTimeMillis() - startTime < 6000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            allItems = repository.allTranscriptions.first()
+            if (allItems.size == 3) break
+            kotlinx.coroutines.delay(100)
+        }
+
+        assertEquals(3, allItems.size)
+        controller.destroy()
+    }
+
+    @Test
+    fun testServiceQueueCancellation() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val serviceIntent1 = Intent(context, TranscriptionOverlayService::class.java).apply {
+            putExtra(TranscriptionOverlayService.EXTRA_AUDIO_URI, "mock://audio/whatsapp_de_1")
+        }
+        val controller = org.robolectric.Robolectric.buildService(TranscriptionOverlayService::class.java, serviceIntent1)
+        controller.create()
+        val service = controller.get()
+        service.onStartCommand(serviceIntent1, 0, 1)
+
+        val serviceIntent2 = Intent(context, TranscriptionOverlayService::class.java).apply {
+            putExtra(TranscriptionOverlayService.EXTRA_AUDIO_URI, "mock://audio/whatsapp_de_2")
+        }
+        service.onStartCommand(serviceIntent2, 0, 2)
+
+        val cancelIntent = Intent(context, TranscriptionOverlayService::class.java).apply {
+            action = TranscriptionOverlayService.ACTION_CANCEL_TRANSCRIPTION
+        }
+        service.onStartCommand(cancelIntent, 0, 3)
+
+        var allItems: List<TranscriptionEntity> = emptyList()
+        val startTime = System.currentTimeMillis()
+        while (System.currentTimeMillis() - startTime < 6000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            allItems = repository.allTranscriptions.first()
+            if (allItems.size == 1) break
+            kotlinx.coroutines.delay(100)
+        }
+
+        assertEquals(1, allItems.size)
         controller.destroy()
     }
 }
